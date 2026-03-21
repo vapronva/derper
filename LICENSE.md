@@ -1,6 +1,6 @@
 This project is an open-source initiative that builds and packages software from various third-party open-source projects (collectively referred to as **"Original Projects"**) into container images, binaries, packages, and other distributable formats (collectively referred to as "**Distributables**"). \
-All scripts, configurations, documentation, and other original code developed by this project for building the Distributables are collectively referred to as the "**Build System**". \
-Modifications or patches to the Original Projects made by this project and provided via `git` patches or otherwise are collectively referred to as "**Patches**".
+All scripts, configurations, documentation, and other code originally authored by this project for building the Distributables — excluding any files derived from or based on the Original Projects — are collectively referred to as the "**Build System**". \
+Modifications to the Original Projects made by this project — whether provided as `git` patch files, as modified copies of upstream files included directly in this repository, or in any other form — are collectively referred to as "**Patches**".
 
 ## Ownership and Licensing
 
