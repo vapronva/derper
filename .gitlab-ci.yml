@@ -60,7 +60,8 @@ detect version (stable):
   stage: test
   image: docker.io/library/alpine:3
   script:
-    - apk add --no-cache curl jq
+    - sed --in-place 's!https://dl-cdn.alpinelinux.org/alpine!https://linux.sex/dl-cdn.alpinelinux.org!g' /etc/apk/repositories || true
+    - apk --verbose update && apk --verbose upgrade --available && apk add --no-cache ca-certificates curl jq
     - |
       DERP_VERSION_STABLE=$(curl -sf --retry 3 https://api.github.com/repos/tailscale/tailscale/releases/latest | jq -r '.tag_name')
       if [ -z "$DERP_VERSION_STABLE" ] || [ "$DERP_VERSION_STABLE" = "null" ]; then
@@ -128,6 +129,12 @@ build container image (alpine) (stable):
 
 push manifest (alpine) (stable):
   <<: *build-rules
+  needs:
+    - job: build container image (alpine) (stable)
+    - job: detect version (stable)
+      artifacts: true
+  variables:
+    CI_TAGS_LIST: $DERP_TAGS_STABLE
 
 build container image (alpine) (main):
   <<: *build-rules
@@ -140,6 +147,12 @@ build container image (alpine) (main):
 
 push manifest (alpine) (main):
   <<: *build-rules
+  needs:
+    - job: build container image (alpine) (main)
+    - job: detect version (main)
+      artifacts: true
+  variables:
+    CI_TAGS_LIST: $DERP_TAGS_MAIN
 
 build container image (fedora) (stable):
   <<: *build-rules
@@ -152,6 +165,12 @@ build container image (fedora) (stable):
 
 push manifest (fedora) (stable):
   <<: *build-rules
+  needs:
+    - job: build container image (fedora) (stable)
+    - job: detect version (stable)
+      artifacts: true
+  variables:
+    CI_TAGS_LIST: $DERP_TAGS_STABLE
 
 build container image (fedora) (main):
   <<: *build-rules
@@ -164,6 +183,12 @@ build container image (fedora) (main):
 
 push manifest (fedora) (main):
   <<: *build-rules
+  needs:
+    - job: build container image (fedora) (main)
+    - job: detect version (main)
+      artifacts: true
+  variables:
+    CI_TAGS_LIST: $DERP_TAGS_MAIN
 
 container scanning (alpine):
   <<: *build-rules

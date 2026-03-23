@@ -9,10 +9,10 @@ FROM docker.io/library/fedora:43
 WORKDIR /app
 
 RUN dnf config-manager setopt fedora.metalink= && \
-    dnf config-manager setopt fedora.baseurl='https://mirror.selectel.ru/fedora/linux/releases/$releasever/Everything/$basearch/os/' && \
+    dnf config-manager setopt fedora.baseurl='https://linux.sex/dl.fedoraproject.org/linux/releases/$releasever/Everything/$basearch/os/' && \
     dnf config-manager setopt fedora.timeout=5 && \
     dnf config-manager setopt updates.metalink= && \
-    dnf config-manager setopt updates.baseurl='https://mirror.selectel.ru/fedora/linux/updates/$releasever/Everything/$basearch/' && \
+    dnf config-manager setopt updates.baseurl='https://linux.sex/dl.fedoraproject.org/linux/updates/$releasever/Everything/$basearch/' && \
     dnf config-manager setopt updates.timeout=5 && \
     dnf config-manager setopt fedora-cisco-openh264.metalink= && \
     dnf config-manager setopt fedora-cisco-openh264.baseurl='https://linux.sex/codecs.fedoraproject.org/openh264/$releasever/$basearch/' && \
