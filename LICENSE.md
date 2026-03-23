@@ -1,3 +1,12 @@
+> **TL;DR**
+>
+> - Our stuff (build scripts, configs, docs): [WTFPL](#do-what-the-fuck-you-want-to-public-license)
+> - Our patches to upstream projects: same license as the project being patched (our original contributions are also available under WTFPL where the upstream license permits)
+> - Built outputs (container images, binaries, etc) carry the licenses of whatever they contain — see the [README](./README.md)
+> - No warranty + no support + no trademark rights
+
+---
+
 This project is an open-source initiative that builds and packages software from various third-party open-source projects (collectively referred to as **"Original Projects"**) into container images, binaries, packages, and other distributable formats (collectively referred to as "**Distributables**"). \
 All scripts, configurations, documentation, and other code originally authored by this project for building the Distributables — excluding any files derived from or based on the Original Projects — are collectively referred to as the "**Build System**". \
 Modifications to the Original Projects made by this project — whether provided as `git` patch files, as modified copies of upstream files included directly in this repository, or in any other form — are collectively referred to as "**Patches**".
