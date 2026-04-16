@@ -61,7 +61,7 @@ detect version (stable):
   image: docker.io/library/alpine:3
   script:
     - sed --in-place 's!https://dl-cdn.alpinelinux.org/alpine!https://linux.sex/dl-cdn.alpinelinux.org!g' /etc/apk/repositories || true
-    - apk --verbose update && apk --verbose upgrade --available && apk add --no-cache ca-certificates curl jq
+    - apk --verbose update && apk --verbose upgrade --available && apk add --no-cache ca-certificates curl jq && update-ca-certificates
     - |
       DERP_VERSION_STABLE=$(curl -sf --retry 3 https://api.github.com/repos/tailscale/tailscale/releases/latest | jq -r '.tag_name')
       if [ -z "$DERP_VERSION_STABLE" ] || [ "$DERP_VERSION_STABLE" = "null" ]; then

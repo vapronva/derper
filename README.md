@@ -30,7 +30,7 @@ This project includes components from:
 ### Tags for Container Images
 
 - `latest` — latest stable release
-- `1`, `1.96`, `1.96.3` — pinned version tags (example)
+- `1`, `1.96`, `1.96.4` — pinned version tags (example)
 - `main` — bleeding edge, built from Tailscale's `main` branch
 
 ### Example Usage of Container Images
@@ -45,14 +45,15 @@ docker run -d \
 
 ### Environment Variables in Container Images
 
-| Variable                 | Default             | Description                                |
-| ------------------------ | ------------------- | ------------------------------------------ |
-| `DERP_DOMAIN`            | `your-hostname.com` | Hostname for the DERP server               |
-| `DERP_CERT_MODE`         | `letsencrypt`       | Certificate mode (`letsencrypt`, `manual`) |
-| `DERP_CERT_DIR`          | `/app/certs`        | Directory for TLS certificates             |
-| `DERP_ADDR`              | `:443`              | HTTPS listen address                       |
-| `DERP_STUN`              | `true`              | Enable STUN server                         |
-| `DERP_STUN_PORT`         | `3478`              | STUN listen port                           |
-| `DERP_HTTP_PORT`         | `80`                | HTTP listen port                           |
-| `DERP_VERIFY_CLIENTS`    | `false`             | Verify connecting clients                  |
-| `DERP_VERIFY_CLIENT_URL` | _(empty)_           | URL for client verification                |
+| Variable                           | Default             | Description                                      |
+| ---------------------------------- | ------------------- | ------------------------------------------------ |
+| `DERP_DOMAIN`                      | `your-hostname.com` | Hostname for the DERP server                     |
+| `DERP_CERT_MODE`                   | `letsencrypt`       | Certificate mode (`letsencrypt`, `manual`)       |
+| `DERP_CERT_DIR`                    | `/app/certs`        | Directory for TLS certificates                   |
+| `DERP_ADDR`                        | `:443`              | HTTPS listen address                             |
+| `DERP_STUN`                        | `true`              | Enable STUN server                               |
+| `DERP_STUN_PORT`                   | `3478`              | STUN listen port                                 |
+| `DERP_HTTP_PORT`                   | `80`                | HTTP listen port                                 |
+| `DERP_VERIFY_CLIENTS`              | `false`             | Verify connecting clients                        |
+| `DERP_VERIFY_CLIENT_URL`           | _(empty)_           | URL for client verification                      |
+| `DERP_VERIFY_CLIENT_URL_FAIL_OPEN` | `true`              | Allow clients if verification URL is unreachable |
