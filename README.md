@@ -58,4 +58,5 @@ docker run -d \
 | `DERP_VERIFY_CLIENT_URL`           | _(empty)_           | URL for client verification                      |
 | `DERP_VERIFY_CLIENT_URL_FAIL_OPEN` | `true`              | Allow clients if verification URL is unreachable |
 | `DERP_MESH_PSK_FILE`               | _(empty)_           | Path to mesh pre-shared key file                 |
+| `DERP_MESH_WITH`                   | _(empty)_           | Comma-separated DERP hostnames to mesh with      |
 | `TAILSCALE_DERPER_MESH_KEY`        | _(empty)_           | Mesh PSK string (overrides `DERP_MESH_PSK_FILE`) |

@@ -27,6 +27,7 @@ ENV DERP_VERIFY_CLIENTS=false
 ENV DERP_VERIFY_CLIENT_URL=""
 ENV DERP_VERIFY_CLIENT_URL_FAIL_OPEN=true
 ENV DERP_MESH_PSK_FILE=""
+ENV DERP_MESH_WITH=""
 ENV TAILSCALE_DERPER_MESH_KEY=""
 
 COPY --from=builder /go/bin/derper .
@@ -46,4 +47,5 @@ CMD if [ -n "$TAILSCALE_DERPER_MESH_KEY" ]; then \
     --verify-clients=$DERP_VERIFY_CLIENTS \
     --verify-client-url=$DERP_VERIFY_CLIENT_URL \
     --verify-client-url-fail-open=$DERP_VERIFY_CLIENT_URL_FAIL_OPEN \
-    --mesh-psk-file=$DERP_MESH_PSK_FILE
+    --mesh-psk-file=$DERP_MESH_PSK_FILE \
+    --mesh-with=$DERP_MESH_WITH
