@@ -45,18 +45,22 @@ docker run -d \
 
 ### Environment Variables in Container Images
 
-| Variable                           | Default             | Description                                      |
-| ---------------------------------- | ------------------- | ------------------------------------------------ |
-| `DERP_DOMAIN`                      | `your-hostname.com` | Hostname for the DERP server                     |
-| `DERP_CERT_MODE`                   | `letsencrypt`       | Certificate mode (`letsencrypt`, `manual`)       |
-| `DERP_CERT_DIR`                    | `/app/certs`        | Directory for TLS certificates                   |
-| `DERP_ADDR`                        | `:443`              | HTTPS listen address                             |
-| `DERP_STUN`                        | `true`              | Enable STUN server                               |
-| `DERP_STUN_PORT`                   | `3478`              | STUN listen port                                 |
-| `DERP_HTTP_PORT`                   | `80`                | HTTP listen port                                 |
-| `DERP_VERIFY_CLIENTS`              | `false`             | Verify connecting clients                        |
-| `DERP_VERIFY_CLIENT_URL`           | _(empty)_           | URL for client verification                      |
-| `DERP_VERIFY_CLIENT_URL_FAIL_OPEN` | `true`              | Allow clients if verification URL is unreachable |
-| `DERP_MESH_PSK_FILE`               | _(empty)_           | Path to mesh pre-shared key file                 |
-| `DERP_MESH_WITH`                   | _(empty)_           | Comma-separated DERP hostnames to mesh with      |
-| `TAILSCALE_DERPER_MESH_KEY`        | _(empty)_           | Mesh PSK string (overrides `DERP_MESH_PSK_FILE`) |
+| Variable                               | Default             | Description                                      |
+| -------------------------------------- | ------------------- | ------------------------------------------------ |
+| `DERP_DOMAIN`                          | `your-hostname.com` | Hostname for the DERP server                     |
+| `DERP_CERT_MODE`                       | `letsencrypt`       | Certificate mode (`letsencrypt`, `manual`)       |
+| `DERP_CERT_DIR`                        | `/app/certs`        | Directory for TLS certificates                   |
+| `DERP_ACME_EMAIL`                      | _(empty)_           | ACME account contact email address               |
+| `DERP_ADDR`                            | `:443`              | HTTPS listen address                             |
+| `DERP_STUN`                            | `true`              | Enable STUN server                               |
+| `DERP_STUN_PORT`                       | `3478`              | STUN listen port                                 |
+| `DERP_HTTP_PORT`                       | `80`                | HTTP listen port                                 |
+| `DERP_HOME`                            | _(empty)_           | Root path: URL, `blank`, or empty for default    |
+| `DERP_BOOTSTRAP_DNS_NAMES`             | _(empty)_           | Comma-separated hostnames for /bootstrap-dns     |
+| `DERP_UNPUBLISHED_BOOTSTRAP_DNS_NAMES` | _(empty)_           | Unpublished /bootstrap-dns hostnames             |
+| `DERP_VERIFY_CLIENTS`                  | `false`             | Verify connecting clients                        |
+| `DERP_VERIFY_CLIENT_URL`               | _(empty)_           | URL for client verification                      |
+| `DERP_VERIFY_CLIENT_URL_FAIL_OPEN`     | `true`              | Allow clients if verification URL is unreachable |
+| `DERP_MESH_PSK_FILE`                   | _(empty)_           | Path to mesh pre-shared key file                 |
+| `DERP_MESH_WITH`                       | _(empty)_           | Comma-separated DERP hostnames to mesh with      |
+| `TAILSCALE_DERPER_MESH_KEY`            | _(empty)_           | Mesh PSK string (overrides `DERP_MESH_PSK_FILE`) |
