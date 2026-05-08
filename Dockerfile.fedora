@@ -4,7 +4,7 @@ ARG DERP_VERSION=latest
 
 RUN go install tailscale.com/cmd/derper@${DERP_VERSION}
 
-FROM docker.io/library/fedora:43
+FROM docker.io/library/fedora:44
 
 WORKDIR /app
 

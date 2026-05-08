@@ -19,7 +19,7 @@ This project includes components from:
 ### To the [Original `derper-docker` Dockerfile](https://github.com/kaaanata/derper-docker/blob/main/Dockerfile)
 
 - Split into two Dockerfiles: Alpine-based ([`Dockerfile.alpine`](./Dockerfile.alpine)) and Fedora-based ([`Dockerfile.fedora`](./Dockerfile.fedora))
-- Changed runtime base image from `ubuntu` to `alpine:3`/`fedora:43` and builder from `golang:latest` to `golang:1.26-alpine`/`golang:1.26`
+- Changed runtime base image from `ubuntu` to `alpine:3`/`fedora:44` and builder from `golang:latest` to `golang:1.26-alpine`/`golang:1.26`
 - Added custom mirror support for package repos
 
 ## Container Images
