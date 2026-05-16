@@ -61,9 +61,13 @@ detect version (stable):
   image: docker.io/library/alpine:3
   script:
     - sed --in-place 's!https://dl-cdn.alpinelinux.org/alpine!https://linux.sex/dl-cdn.alpinelinux.org!g' /etc/apk/repositories || true
-    - apk --verbose update && apk --verbose upgrade --available && apk add --no-cache ca-certificates curl jq && update-ca-certificates
+    - apk --verbose update && apk --verbose upgrade --available && apk add --no-cache ca-certificates curl jq git && update-ca-certificates
     - |
-      DERP_VERSION_STABLE=$(curl -sf --retry 3 https://api.github.com/repos/tailscale/tailscale/releases/latest | jq -r '.tag_name')
+      DERP_VERSION_STABLE=$(curl -sf --retry 3 "https://api.github.com/repos/tailscale/tailscale/tags?per_page=100" | jq -r '.[].name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | grep -v -- '-pre' | sort -V | tail -n1)
+      if [ -z "$DERP_VERSION_STABLE" ]; then
+        echo "GitHub tags API unavailable or empty; falling back to git ls-remote"
+        DERP_VERSION_STABLE=$(git ls-remote --tags --refs https://github.com/tailscale/tailscale.git | awk -F/ '{print $NF}' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | grep -v -- '-pre' | sort -V | tail -n1)
+      fi
       if [ -z "$DERP_VERSION_STABLE" ] || [ "$DERP_VERSION_STABLE" = "null" ]; then
         echo "ERROR: Failed to detect latest tailscale version"
         exit 1
