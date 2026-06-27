@@ -1,0 +1,4 @@
+[submodule "src/tailscale"]
+	path = src/tailscale
+	url = https://github.com/tailscale/tailscale.git
+	shallow = true

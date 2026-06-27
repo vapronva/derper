@@ -5,207 +5,84 @@ stages:
   - post-test
 
 include:
-  - component: $CI_SERVER_FQDN/ci/sast/sast@1
-  - component: $CI_SERVER_FQDN/ci/sast/iac@1
-  - component: $CI_SERVER_FQDN/ci/sast/bearer@1
-  - component: $CI_SERVER_FQDN/ci/sast/datadog@1
-  - component: $CI_SERVER_FQDN/ci/secret-detection/sd@1
-  - component: $CI_SERVER_FQDN/ci/dependency-scanning/ds@1
-  - component: $CI_SERVER_FQDN/ci/docker/build-buildah@3
+  - component: $CI_SERVER_FQDN/ci/security/bundle@1
+  - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
     inputs:
-      job_name: build container image (alpine) (stable)
-      job_name_manifest: push manifest (alpine) (stable)
-      ci_image_name: derper-alpine
-      ci_image_tags: latest
-      dockerfile_path: Dockerfile.alpine
-      build_architectures: linux/amd64,linux/arm64
-  - component: $CI_SERVER_FQDN/ci/docker/build-buildah@3
+      name: alpine
+      build_needs:
+        - job: detect version
+          artifacts: true
+      image: derper-alpine
+      tags: $DERP_TAGS
+      dockerfile: Dockerfile.alpine
+      patches_dir: src/patches
+      patches_target: src/tailscale
+      architectures: linux/amd64,linux/arm64
+      scan_tag: latest
+      rules_changes:
+        - Dockerfile.alpine
+        - Dockerfile.fedora
+        - .dockerignore
+        - src/patches/**/*
+        - src/tailscale
+        - .gitlab-ci.yml
+  - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
     inputs:
-      job_name: build container image (alpine) (main)
-      job_name_manifest: push manifest (alpine) (main)
-      ci_image_name: derper-alpine
-      ci_image_tags: main
-      dockerfile_path: Dockerfile.alpine
-      build_architectures: linux/amd64,linux/arm64
-  - component: $CI_SERVER_FQDN/ci/docker/build-buildah@3
-    inputs:
-      job_name: build container image (fedora) (stable)
-      job_name_manifest: push manifest (fedora) (stable)
-      ci_image_name: derper-fedora
-      ci_image_tags: latest
-      dockerfile_path: Dockerfile.fedora
-      build_architectures: linux/amd64,linux/arm64
-  - component: $CI_SERVER_FQDN/ci/docker/build-buildah@3
-    inputs:
-      job_name: build container image (fedora) (main)
-      job_name_manifest: push manifest (fedora) (main)
-      ci_image_name: derper-fedora
-      ci_image_tags: main
-      dockerfile_path: Dockerfile.fedora
-      build_architectures: linux/amd64,linux/arm64
-  - component: $CI_SERVER_FQDN/ci/container-scanning/cs@1
-    inputs:
-      job_name: container scanning (alpine)
-      default_branch_image: $CI_REGISTRY_IMAGE/derper-alpine:latest
-      application_repository: $CI_REGISTRY_IMAGE/derper-alpine
-      application_tag: latest
-  - component: $CI_SERVER_FQDN/ci/container-scanning/cs@1
-    inputs:
-      job_name: container scanning (fedora)
-      default_branch_image: $CI_REGISTRY_IMAGE/derper-fedora:latest
-      application_repository: $CI_REGISTRY_IMAGE/derper-fedora
-      application_tag: latest
+      name: fedora
+      build_needs:
+        - job: detect version
+          artifacts: true
+      image: derper-fedora
+      tags: $DERP_TAGS
+      dockerfile: Dockerfile.fedora
+      patches_dir: src/patches
+      patches_target: src/tailscale
+      architectures: linux/amd64,linux/arm64
+      scan_tag: latest
+      rules_changes:
+        - Dockerfile.alpine
+        - Dockerfile.fedora
+        - .dockerignore
+        - src/patches/**/*
+        - src/tailscale
+        - .gitlab-ci.yml
 
-detect version (stable):
+.fetch-submodule: &fetch-submodule
+  variables:
+    GIT_SUBMODULE_STRATEGY: recursive
+    GIT_SUBMODULE_DEPTH: "1"
+
+detect version:
   stage: test
   image: docker.io/library/alpine:3
-  script:
-    - sed --in-place 's!https://dl-cdn.alpinelinux.org/alpine!https://linux.sex/dl-cdn.alpinelinux.org!g' /etc/apk/repositories || true
-    - apk --verbose update && apk --verbose upgrade --available && apk add --no-cache ca-certificates curl jq git && update-ca-certificates
-    - |
-      DERP_VERSION_STABLE=$(curl -sf --retry 3 "https://api.github.com/repos/tailscale/tailscale/tags?per_page=100" | jq -r '.[].name' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | grep -v -- '-pre' | sort -V | tail -n1)
-      if [ -z "$DERP_VERSION_STABLE" ]; then
-        echo "GitHub tags API unavailable or empty; falling back to git ls-remote"
-        DERP_VERSION_STABLE=$(git ls-remote --tags --refs https://github.com/tailscale/tailscale.git | awk -F/ '{print $NF}' | grep -E '^v[0-9]+\.[0-9]+\.[0-9]+' | grep -v -- '-pre' | sort -V | tail -n1)
-      fi
-      if [ -z "$DERP_VERSION_STABLE" ] || [ "$DERP_VERSION_STABLE" = "null" ]; then
-        echo "ERROR: Failed to detect latest tailscale version"
-        exit 1
-      fi
-      echo "Detected tailscale version: $DERP_VERSION_STABLE"
-    - |
-      VERSION="${DERP_VERSION_STABLE#v}"
-      MAJOR=$(echo "$VERSION" | cut -d. -f1)
-      MINOR=$(echo "$VERSION" | cut -d. -f1-2)
-      DERP_TAGS_STABLE="latest,$MAJOR,$MINOR,$VERSION"
-      echo "Generated tags: $DERP_TAGS_STABLE"
-    - |
-      echo "DERP_VERSION_STABLE=$DERP_VERSION_STABLE" > stable.env
-      echo "DERP_TAGS_STABLE=$DERP_TAGS_STABLE" >> stable.env
-    - cat stable.env
-  artifacts:
-    reports:
-      dotenv: stable.env
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes:
-        - Dockerfile.alpine
-        - Dockerfile.fedora
-        - .gitlab-ci.yml
-
-detect version (main):
-  stage: test
-  image: docker.io/library/alpine:3
+  <<: *fetch-submodule
   script:
     - |
-      echo "DERP_VERSION_MAIN=main" > main.env
-      echo "DERP_TAGS_MAIN=main" >> main.env
-    - cat main.env
+      VERSION="$(cat src/tailscale/VERSION.txt)"
+      MAJOR="$(echo "$VERSION" | cut -d. -f1)"
+      MINOR="$(echo "$VERSION" | cut -d. -f1-2)"
+      DERP_TAGS="latest,$MAJOR,$MINOR,$VERSION"
+      echo "Tailscale (pinned submodule): $VERSION"
+      echo "Generated tags: $DERP_TAGS"
+      echo "DERP_TAGS=$DERP_TAGS" > derp.env
+    - cat derp.env
   artifacts:
     reports:
-      dotenv: main.env
+      dotenv: derp.env
   rules:
     - if: $CI_PIPELINE_SOURCE == "schedule"
+    - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
       changes:
         - Dockerfile.alpine
         - Dockerfile.fedora
+        - .dockerignore
+        - src/patches/**/*
+        - src/tailscale
         - .gitlab-ci.yml
 
-.build rules: &build-rules
-  rules:
-    - if: $CI_PIPELINE_SOURCE == "schedule"
-    - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes:
-        - Dockerfile.alpine
-        - Dockerfile.fedora
-        - .gitlab-ci.yml
+build alpine:
+  <<: *fetch-submodule
 
-build container image (alpine) (stable):
-  <<: *build-rules
-  needs:
-    - job: detect version (stable)
-      artifacts: true
-  variables:
-    CI_TAGS_LIST: $DERP_TAGS_STABLE
-    BUILD_ARGS: --build-arg DERP_VERSION=$DERP_VERSION_STABLE
-
-push manifest (alpine) (stable):
-  <<: *build-rules
-  needs:
-    - job: build container image (alpine) (stable)
-    - job: detect version (stable)
-      artifacts: true
-  variables:
-    CI_TAGS_LIST: $DERP_TAGS_STABLE
-
-build container image (alpine) (main):
-  <<: *build-rules
-  needs:
-    - job: detect version (main)
-      artifacts: true
-  variables:
-    CI_TAGS_LIST: $DERP_TAGS_MAIN
-    BUILD_ARGS: --build-arg DERP_VERSION=$DERP_VERSION_MAIN
-
-push manifest (alpine) (main):
-  <<: *build-rules
-  needs:
-    - job: build container image (alpine) (main)
-    - job: detect version (main)
-      artifacts: true
-  variables:
-    CI_TAGS_LIST: $DERP_TAGS_MAIN
-
-build container image (fedora) (stable):
-  <<: *build-rules
-  needs:
-    - job: detect version (stable)
-      artifacts: true
-  variables:
-    CI_TAGS_LIST: $DERP_TAGS_STABLE
-    BUILD_ARGS: --build-arg DERP_VERSION=$DERP_VERSION_STABLE
-
-push manifest (fedora) (stable):
-  <<: *build-rules
-  needs:
-    - job: build container image (fedora) (stable)
-    - job: detect version (stable)
-      artifacts: true
-  variables:
-    CI_TAGS_LIST: $DERP_TAGS_STABLE
-
-build container image (fedora) (main):
-  <<: *build-rules
-  needs:
-    - job: detect version (main)
-      artifacts: true
-  variables:
-    CI_TAGS_LIST: $DERP_TAGS_MAIN
-    BUILD_ARGS: --build-arg DERP_VERSION=$DERP_VERSION_MAIN
-
-push manifest (fedora) (main):
-  <<: *build-rules
-  needs:
-    - job: build container image (fedora) (main)
-    - job: detect version (main)
-      artifacts: true
-  variables:
-    CI_TAGS_LIST: $DERP_TAGS_MAIN
-
-container scanning (alpine):
-  <<: *build-rules
-  needs:
-    - job: build container image (alpine) (stable)
-      optional: true
-    - job: push manifest (alpine) (stable)
-      optional: true
-
-container scanning (fedora):
-  <<: *build-rules
-  needs:
-    - job: build container image (fedora) (stable)
-      optional: true
-    - job: push manifest (fedora) (stable)
-      optional: true
+build fedora:
+  <<: *fetch-submodule

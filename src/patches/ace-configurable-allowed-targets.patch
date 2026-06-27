@@ -1,0 +1,60 @@
+diff --git a/cmd/derper/ace.go b/cmd/derper/ace.go
+index ae2d0cb..70c97d6 100644
+--- a/cmd/derper/ace.go
++++ b/cmd/derper/ace.go
+@@ -11,11 +11,23 @@
+ 	"net"
+ 	"net/http"
+ 	"strings"
++	"sync"
+ 
+ 	"tailscale.com/derp/derpserver"
+ 	"tailscale.com/net/connectproxy"
++	"tailscale.com/util/set"
+ )
+ 
++var aceAllowedTargets = sync.OnceValue(func() set.Set[string] {
++	s := set.Set[string]{}
++	for h := range strings.SplitSeq(*flagACEAllowedTargets, ",") {
++		if h = strings.TrimSpace(strings.ToLower(h)); h != "" {
++			s.Add(h)
++		}
++	}
++	return s
++})
++
+ // serveConnect handles a CONNECT request for ACE support.
+ func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request) {
+ 	if !*flagACEEnabled {
+@@ -29,6 +41,8 @@ func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request)
+ 		return
+ 	}
+ 
++	allowed := aceAllowedTargets()
++
+ 	ch := &connectproxy.Handler{
+ 		Check: func(hostPort string) error {
+ 			host, port, err := net.SplitHostPort(hostPort)
+@@ -67,7 +81,7 @@ func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request)
+ 			}
+ 			// TODO(bradfitz): make policy configurable from flags and/or come
+ 			// from local tailscaled nodeAttrs
+-			if !strings.HasSuffix(host, ".tailscale.com") || strings.Contains(host, "derp") {
++			if !allowed.Contains(strings.ToLower(host)) {
+ 				return errors.New("bad host")
+ 			}
+ 			return nil
+diff --git a/cmd/derper/derper.go b/cmd/derper/derper.go
+index 0e3ab1b..6d8f078 100644
+--- a/cmd/derper/derper.go
++++ b/cmd/derper/derper.go
+@@ -97,7 +97,8 @@
+ 	tcpWriteTimeout = flag.Duration("tcp-write-timeout", derpserver.DefaultTCPWiteTimeout, "TCP write timeout; 0 results in no timeout being set on writes")
+ 
+ 	// ACE
+-	flagACEEnabled = flag.Bool("ace", false, "whether to enable embedded ACE server [experimental + in-development as of 2025-09-12; not yet documented]")
++	flagACEEnabled        = flag.Bool("ace", false, "whether to enable embedded ACE server [experimental + in-development as of 2025-09-12; not yet documented]")
++	flagACEAllowedTargets = flag.String("ace-allowed-target", "controlplane.tailscale.com", "comma-separated list of control-plane hostnames the embedded ACE server may CONNECT to (exact, case-insensitive host match)")
+ )
+ 
+ var (

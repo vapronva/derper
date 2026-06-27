@@ -21,6 +21,11 @@ This project includes components from:
 - Split into two Dockerfiles: Alpine-based ([`Dockerfile.alpine`](./Dockerfile.alpine)) and Fedora-based ([`Dockerfile.fedora`](./Dockerfile.fedora))
 - Changed runtime base image from `ubuntu` to `alpine:3`/`fedora:44` and builder from `golang:latest` to `golang:1.26-alpine`/`golang:1.26`
 - Added custom mirror support for package repos
+- Build `derper` from a Tailscale source tree instead of `go install tailscale.com/cmd/derper@<version>`
+
+### To `derper` Itself ([`src/patches`](./src/patches))
+
+- [`ace-configurable-allowed-targets.patch`](./src/patches/ace-configurable-allowed-targets.patch) — make the embedded ACE proxy's allowed `CONNECT` target configurable via a `-ace-allowed-target` flag
 
 ## Container Images
 
@@ -29,9 +34,8 @@ This project includes components from:
 
 ### Tags for Container Images
 
-- `latest` — latest stable release
-- `1`, `1.96`, `1.96.4` — pinned version tags (example)
-- `main` — bleeding edge, built from Tailscale's `main` branch
+- `latest` — the currently pinned release
+- `1`, `1.100`, `1.100.0` — major / minor / full version of the pinned release (example)
 
 ### Example Usage of Container Images
 
@@ -45,22 +49,24 @@ docker run -d \
 
 ### Environment Variables in Container Images
 
-| Variable                               | Default             | Description                                      |
-| -------------------------------------- | ------------------- | ------------------------------------------------ |
-| `DERP_DOMAIN`                          | `your-hostname.com` | Hostname for the DERP server                     |
-| `DERP_CERT_MODE`                       | `letsencrypt`       | Certificate mode (`letsencrypt`, `manual`)       |
-| `DERP_CERT_DIR`                        | `/app/certs`        | Directory for TLS certificates                   |
-| `DERP_ACME_EMAIL`                      | _(empty)_           | ACME account contact email address               |
-| `DERP_ADDR`                            | `:443`              | HTTPS listen address                             |
-| `DERP_STUN`                            | `true`              | Enable STUN server                               |
-| `DERP_STUN_PORT`                       | `3478`              | STUN listen port                                 |
-| `DERP_HTTP_PORT`                       | `80`                | HTTP listen port                                 |
-| `DERP_HOME`                            | _(empty)_           | Root path: URL, `blank`, or empty for default    |
-| `DERP_BOOTSTRAP_DNS_NAMES`             | _(empty)_           | Comma-separated hostnames for /bootstrap-dns     |
-| `DERP_UNPUBLISHED_BOOTSTRAP_DNS_NAMES` | _(empty)_           | Unpublished /bootstrap-dns hostnames             |
-| `DERP_VERIFY_CLIENTS`                  | `false`             | Verify connecting clients                        |
-| `DERP_VERIFY_CLIENT_URL`               | _(empty)_           | URL for client verification                      |
-| `DERP_VERIFY_CLIENT_URL_FAIL_OPEN`     | `true`              | Allow clients if verification URL is unreachable |
-| `DERP_MESH_PSK_FILE`                   | _(empty)_           | Path to mesh pre-shared key file                 |
-| `DERP_MESH_WITH`                       | _(empty)_           | Comma-separated DERP hostnames to mesh with      |
-| `TAILSCALE_DERPER_MESH_KEY`            | _(empty)_           | Mesh PSK string (overrides `DERP_MESH_PSK_FILE`) |
+| Variable                               | Default                      | Description                                                       |
+| -------------------------------------- | ---------------------------- | ----------------------------------------------------------------- |
+| `DERP_DOMAIN`                          | `your-hostname.com`          | Hostname for the DERP server                                      |
+| `DERP_CERT_MODE`                       | `letsencrypt`                | Certificate mode (`letsencrypt`, `manual`)                        |
+| `DERP_CERT_DIR`                        | `/app/certs`                 | Directory for TLS certificates                                    |
+| `DERP_ACME_EMAIL`                      | _(empty)_                    | ACME account contact email address                                |
+| `DERP_ADDR`                            | `:443`                       | HTTPS listen address                                              |
+| `DERP_STUN`                            | `true`                       | Enable STUN server                                                |
+| `DERP_STUN_PORT`                       | `3478`                       | STUN listen port                                                  |
+| `DERP_HTTP_PORT`                       | `80`                         | HTTP listen port                                                  |
+| `DERP_HOME`                            | _(empty)_                    | Root path: URL, `blank`, or empty for default                     |
+| `DERP_BOOTSTRAP_DNS_NAMES`             | _(empty)_                    | Comma-separated hostnames for /bootstrap-dns                      |
+| `DERP_UNPUBLISHED_BOOTSTRAP_DNS_NAMES` | _(empty)_                    | Unpublished /bootstrap-dns hostnames                              |
+| `DERP_VERIFY_CLIENTS`                  | `false`                      | Verify connecting clients                                         |
+| `DERP_VERIFY_CLIENT_URL`               | _(empty)_                    | URL for client verification                                       |
+| `DERP_VERIFY_CLIENT_URL_FAIL_OPEN`     | `true`                       | Allow clients if verification URL is unreachable                  |
+| `DERP_MESH_PSK_FILE`                   | _(empty)_                    | Path to mesh pre-shared key file                                  |
+| `DERP_MESH_WITH`                       | _(empty)_                    | Comma-separated DERP hostnames to mesh with                       |
+| `TAILSCALE_DERPER_MESH_KEY`            | _(empty)_                    | Mesh PSK string (overrides `DERP_MESH_PSK_FILE`)                  |
+| `DERP_ACE`                             | `false`                      | Enable the embedded ACE `CONNECT` proxy (`-ace`)                  |
+| `DERP_ACE_ALLOWED_TARGET`              | `controlplane.tailscale.com` | ACE allow-list of control-plane hostnames (`-ace-allowed-target`) |

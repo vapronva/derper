@@ -1,8 +1,13 @@
 FROM docker.io/library/golang:1.26-alpine AS builder
 
-ARG DERP_VERSION=latest
+WORKDIR /build
 
-RUN CGO_ENABLED=0 go install tailscale.com/cmd/derper@${DERP_VERSION}
+COPY src/tailscale ./
+
+RUN VER="$(cat VERSION.txt)" && \
+    CGO_ENABLED=0 go build -trimpath \
+    -ldflags="-s -w -X tailscale.com/version.longStamp=${VER} -X tailscale.com/version.shortStamp=${VER}" \
+    -o /derper ./cmd/derper
 
 FROM docker.io/library/alpine:3
 
@@ -13,7 +18,7 @@ RUN set -xe && \
     apk --verbose update && \
     apk --verbose upgrade --available && \
     apk add --no-cache ca-certificates && \
-    update-ca-certificates && \ 
+    update-ca-certificates && \
     mkdir /app/certs
 
 ENV DERP_DOMAIN=your-hostname.com
@@ -33,8 +38,10 @@ ENV DERP_VERIFY_CLIENT_URL_FAIL_OPEN=true
 ENV DERP_MESH_PSK_FILE=""
 ENV DERP_MESH_WITH=""
 ENV TAILSCALE_DERPER_MESH_KEY=""
+ENV DERP_ACE=false
+ENV DERP_ACE_ALLOWED_TARGET=controlplane.tailscale.com
 
-COPY --from=builder /go/bin/derper .
+COPY --from=builder /derper .
 
 CMD if [ -n "$TAILSCALE_DERPER_MESH_KEY" ]; then \
         umask 077 && \
@@ -56,4 +63,6 @@ CMD if [ -n "$TAILSCALE_DERPER_MESH_KEY" ]; then \
     --verify-client-url=$DERP_VERIFY_CLIENT_URL \
     --verify-client-url-fail-open=$DERP_VERIFY_CLIENT_URL_FAIL_OPEN \
     --mesh-psk-file=$DERP_MESH_PSK_FILE \
-    --mesh-with=$DERP_MESH_WITH
+    --mesh-with=$DERP_MESH_WITH \
+    --ace=$DERP_ACE \
+    --ace-allowed-target=$DERP_ACE_ALLOWED_TARGET
