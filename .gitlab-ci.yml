@@ -22,7 +22,7 @@ include:
       rules_changes:
         - Dockerfile.alpine
         - Dockerfile.fedora
-        - .dockerignore
+        - .containerignore
         - src/patches/**/*
         - src/tailscale
         - .gitlab-ci.yml
@@ -42,7 +42,7 @@ include:
       rules_changes:
         - Dockerfile.alpine
         - Dockerfile.fedora
-        - .dockerignore
+        - .containerignore
         - src/patches/**/*
         - src/tailscale
         - .gitlab-ci.yml
@@ -76,7 +76,7 @@ detect version:
       changes:
         - Dockerfile.alpine
         - Dockerfile.fedora
-        - .dockerignore
+        - .containerignore
         - src/patches/**/*
         - src/tailscale
         - .gitlab-ci.yml

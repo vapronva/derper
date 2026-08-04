@@ -1,5 +1,5 @@
 diff --git a/cmd/derper/ace.go b/cmd/derper/ace.go
-index ae2d0cb..70c97d6 100644
+index ae2d0cbeb..70c97d67a 100644
 --- a/cmd/derper/ace.go
 +++ b/cmd/derper/ace.go
 @@ -11,11 +11,23 @@
@@ -45,10 +45,10 @@ index ae2d0cb..70c97d6 100644
  			}
  			return nil
 diff --git a/cmd/derper/derper.go b/cmd/derper/derper.go
-index 0e3ab1b..6d8f078 100644
+index bae4d9f01..35eeffc5d 100644
 --- a/cmd/derper/derper.go
 +++ b/cmd/derper/derper.go
-@@ -97,7 +97,8 @@
+@@ -98,7 +98,8 @@
  	tcpWriteTimeout = flag.Duration("tcp-write-timeout", derpserver.DefaultTCPWiteTimeout, "TCP write timeout; 0 results in no timeout being set on writes")
  
  	// ACE

@@ -1,8 +1,16 @@
-FROM docker.io/library/golang:1.26 AS builder
+ARG TOOLS_IMAGE=docker.horse/ci/on-alpine/tools:1
+
+FROM $TOOLS_IMAGE AS tools
+
+FROM docker.io/library/golang:1.26-trixie AS builder
+
+ARG MIRROR_GO_URL=""
 
 WORKDIR /build
 
 COPY src/tailscale ./
+
+RUN if [ -n "$MIRROR_GO_URL" ]; then go env -w GOPROXY="${MIRROR_GO_URL%/}|https://proxy.golang.org,direct"; fi
 
 RUN VER="$(cat VERSION.txt)" && \
     CGO_ENABLED=0 go build -trimpath \
@@ -11,22 +19,17 @@ RUN VER="$(cat VERSION.txt)" && \
 
 FROM docker.io/library/fedora:44
 
+ARG MIRROR_FEDORA_URL=""
+
+ARG MIRROR_FEDORA_FALLBACK_URL=""
+
+ARG MIRROR_FEDORA_CODECS_URL=""
+
 WORKDIR /app
 
-RUN dnf config-manager setopt fedora.metalink= && \
-    dnf config-manager setopt fedora.baseurl='https://linux.sex/dl.fedoraproject.org/linux/releases/$releasever/Everything/$basearch/os/' && \
-    dnf config-manager setopt fedora.timeout=5 && \
-    dnf config-manager setopt updates.metalink= && \
-    dnf config-manager setopt updates.baseurl='https://linux.sex/dl.fedoraproject.org/linux/updates/$releasever/Everything/$basearch/' && \
-    dnf config-manager setopt updates.timeout=5 && \
-    dnf config-manager setopt fedora-cisco-openh264.metalink= && \
-    dnf config-manager setopt fedora-cisco-openh264.baseurl='https://linux.sex/codecs.fedoraproject.org/openh264/$releasever/$basearch/' && \
-    dnf config-manager setopt fedora-cisco-openh264.timeout=5 && \
-    dnf upgrade --assumeyes && \
-    dnf update --assumeyes && \
-    dnf install --assumeyes ca-certificates && \
-    update-ca-trust && \
-    dnf clean all && \
+COPY --from=tools /usr/local/bin/pkg-base-setup /usr/local/bin/
+
+RUN pkg-base-setup && \
     mkdir /app/certs
 
 ENV DERP_DOMAIN=your-hostname.com
