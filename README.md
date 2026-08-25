@@ -19,7 +19,7 @@ This project includes components from:
 ### To the [Original `derper-docker` Dockerfile](https://github.com/kaaanata/derper-docker/blob/main/Dockerfile)
 
 - Split into two Dockerfiles: Alpine-based ([`Dockerfile.alpine`](./Dockerfile.alpine)) and Fedora-based ([`Dockerfile.fedora`](./Dockerfile.fedora))
-- Changed runtime base image from `ubuntu` to `alpine:3`/`fedora:44` and builder from `golang:latest` to `golang:1.26-alpine`/`golang:1.26`
+- Changed runtime base image from `ubuntu` to `alpine:3`/`fedora:44` and builder from `golang:latest` to `golang:1.27-alpine`/`golang:1.27-trixie`
 - Added custom mirror support for package repos
 - Build `derper` from a Tailscale source tree instead of `go install tailscale.com/cmd/derper@<version>`
 
@@ -35,7 +35,7 @@ This project includes components from:
 ### Tags for Container Images
 
 - `latest` — the currently pinned release
-- `1`, `1.100`, `1.100.0` — major / minor / full version of the pinned release (example)
+- `1`, `1.102`, `1.102.3` — major / minor / full version of the pinned release (example)
 
 ### Example Usage of Container Images
 
