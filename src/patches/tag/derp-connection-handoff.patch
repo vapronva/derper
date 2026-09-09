@@ -1,0 +1,227 @@
+diff --git a/cmd/derper/derper.go b/cmd/derper/derper.go
+index bae4d9f01..6b4044e28 100644
+--- a/cmd/derper/derper.go
++++ b/cmd/derper/derper.go
+@@ -11,6 +11,7 @@
+ package main // import "tailscale.com/cmd/derper"
+ 
+ import (
++	"bufio"
+ 	"cmp"
+ 	"context"
+ 	"crypto/tls"
+@@ -34,6 +35,7 @@
+ 	runtimemetrics "runtime/metrics"
+ 	"strconv"
+ 	"strings"
++	"sync"
+ 	"syscall"
+ 	"time"
+ 
+@@ -106,8 +108,10 @@
+ 	tlsActiveVersion  = metrics.NewLabelMap("gauge_derper_tls_active_version", "version")
+ )
+ 
+-const setecMeshKeyName = "meshkey"
+-const meshKeyEnvVar = "TAILSCALE_DERPER_MESH_KEY"
++const (
++	setecMeshKeyName = "meshkey"
++	meshKeyEnvVar    = "TAILSCALE_DERPER_MESH_KEY"
++)
+ 
+ type config struct {
+ 	PrivateKey key.NodePrivate
+@@ -143,7 +147,7 @@ func loadConfig() config {
+ 
+ func writeNewConfig() config {
+ 	k := key.NewNode()
+-	if err := os.MkdirAll(filepath.Dir(*configPath), 0777); err != nil {
++	if err := os.MkdirAll(filepath.Dir(*configPath), 0o777); err != nil {
+ 		log.Fatal(err)
+ 	}
+ 	cfg := config{
+@@ -153,7 +157,7 @@ func writeNewConfig() config {
+ 	if err != nil {
+ 		log.Fatal(err)
+ 	}
+-	if err := atomicfile.WriteFile(*configPath, b, 0600); err != nil {
++	if err := atomicfile.WriteFile(*configPath, b, 0o600); err != nil {
+ 		log.Fatal(err)
+ 	}
+ 	return cfg
+@@ -373,7 +377,16 @@ func main() {
+ 				}
+ 				tlsRequestVersion.Add(label, 1)
+ 				tlsActiveVersion.Add(label, 1)
+-				defer tlsActiveVersion.Add(label, -1)
++				htw := &hijackTrackingResponseWriter{
++					ResponseWriter: w,
++					onConnClose:    func() { tlsActiveVersion.Add(label, -1) },
++				}
++				w = htw
++				defer func() {
++					if !htw.hijacked {
++						tlsActiveVersion.Add(label, -1)
++					}
++				}()
+ 
+ 				if r.Method == "CONNECT" {
+ 					serveConnect(s, w, r)
+@@ -623,3 +636,44 @@ func getHomeHandler(val string) (_ http.Handler, ok bool) {
+ 	}
+ 	return nil, false
+ }
++
++type hijackTrackingResponseWriter struct {
++	http.ResponseWriter
++	onConnClose func()
++
++	hijacked bool
++}
++
++func (w *hijackTrackingResponseWriter) Unwrap() http.ResponseWriter { return w.ResponseWriter }
++
++func (w *hijackTrackingResponseWriter) Flush() {
++	if f, ok := w.ResponseWriter.(http.Flusher); ok {
++		f.Flush()
++	}
++}
++
++func (w *hijackTrackingResponseWriter) Hijack() (net.Conn, *bufio.ReadWriter, error) {
++	hj, ok := w.ResponseWriter.(http.Hijacker)
++	if !ok {
++		return nil, nil, errors.New("underlying ResponseWriter does not support hijacking")
++	}
++	c, brw, err := hj.Hijack()
++	if err != nil {
++		return c, brw, err
++	}
++	w.hijacked = true
++	return &closeHookConn{Conn: c, onClose: w.onConnClose}, brw, nil
++}
++
++type closeHookConn struct {
++	net.Conn
++	onClose   func()
++	closeOnce sync.Once
++}
++
++func (c *closeHookConn) Close() error {
++	c.closeOnce.Do(c.onClose)
++	return c.Conn.Close()
++}
++
++func (c *closeHookConn) NetConn() net.Conn { return c.Conn }
+diff --git a/derp/derpserver/derpserver_linux.go b/derp/derpserver/derpserver_linux.go
+index c6154661c..18b0e3f53 100644
+--- a/derp/derpserver/derpserver_linux.go
++++ b/derp/derpserver/derpserver_linux.go
+@@ -7,7 +7,6 @@
+ 
+ import (
+ 	"context"
+-	"crypto/tls"
+ 	"net"
+ 	"time"
+ 
+@@ -61,7 +60,7 @@ func (c *sclient) tcpConn() *net.TCPConn {
+ 		switch v := nc.(type) {
+ 		case *net.TCPConn:
+ 			return v
+-		case *tls.Conn:
++		case interface{ NetConn() net.Conn }:
+ 			nc = v.NetConn()
+ 		default:
+ 			return nil
+diff --git a/derp/derpserver/handler.go b/derp/derpserver/handler.go
+index f639cb712..dda3c75e3 100644
+--- a/derp/derpserver/handler.go
++++ b/derp/derpserver/handler.go
+@@ -4,19 +4,23 @@
+ package derpserver
+ 
+ import (
++	"bufio"
++	"context"
+ 	"fmt"
+ 	"log"
++	"net"
+ 	"net/http"
++	"runtime/debug"
+ 	"strings"
++	"time"
+ 
+ 	"tailscale.com/derp"
++	"tailscale.com/net/netutil"
+ )
+ 
+ // Handler returns an http.Handler to be mounted at /derp, serving s.
+ func Handler(s *Server) http.Handler {
+ 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+-		ctx := r.Context()
+-
+ 		// These are installed both here and in cmd/derper. The check here
+ 		// catches both cmd/derper run with DERP disabled (STUN only mode) as
+ 		// well as DERP being run in tests with derphttp.Handler directly,
+@@ -44,7 +48,7 @@ func Handler(s *Server) http.Handler {
+ 			return
+ 		}
+ 
+-		netConn, conn, err := h.Hijack()
++		netConn, brw, err := h.Hijack()
+ 		if err != nil {
+ 			log.Printf("Hijack failed: %v", err)
+ 			http.Error(w, "HTTP does not support general TCP support", 500)
+@@ -52,24 +56,49 @@ func Handler(s *Server) http.Handler {
+ 		}
+ 
+ 		if !fastStart {
++			netConn.SetWriteDeadline(time.Now().Add(10 * time.Second))
+ 			pubKey := s.PublicKey()
+-			fmt.Fprintf(conn, "HTTP/1.1 101 Switching Protocols\r\n"+
++			if _, err := fmt.Fprintf(netConn, "HTTP/1.1 101 Switching Protocols\r\n"+
+ 				"Upgrade: DERP\r\n"+
+ 				"Connection: Upgrade\r\n"+
+ 				"Derp-Version: %v\r\n"+
+ 				"Derp-Public-Key: %s\r\n\r\n",
+ 				derp.ProtocolVersion,
+-				pubKey.UntypedHexString())
++				pubKey.UntypedHexString()); err != nil {
++				if !s.isClosed() {
++					s.logf("derp: %s: writing upgrade response: %v", netConn.RemoteAddr(), err)
++				}
++				netConn.Close()
++				return
++			}
+ 		}
+ 
++		ctx := context.Background()
+ 		if v := r.Header.Get(derp.IdealNodeHeader); v != "" {
+ 			ctx = IdealNodeContextKey.WithValue(ctx, v)
+ 		}
+ 
+-		s.Accept(ctx, netConn, conn, netConn.RemoteAddr().String())
++		readConn := netConn
++		if brw.Reader.Buffered() != 0 {
++			readConn = netutil.NewDrainBufConn(netConn, brw.Reader)
++		}
++		br := bufio.NewReaderSize(readConn, 4<<10)
++		derpBRW := bufio.NewReadWriter(br, nil)
++
++		go serveHijackedConn(ctx, s, netConn, derpBRW)
+ 	})
+ }
+ 
++func serveHijackedConn(ctx context.Context, s *Server, netConn net.Conn, brw *bufio.ReadWriter) {
++	defer func() {
++		if e := recover(); e != nil {
++			log.Printf("derp: panic serving %v: %v\n%s", netConn.RemoteAddr(), e, debug.Stack())
++			netConn.Close()
++		}
++	}()
++	s.Accept(ctx, netConn, brw, netConn.RemoteAddr().String())
++}
++
+ // ProbeHandler is the endpoint that clients without UDP access (including js/wasm) hit to measure
+ // DERP latency, as a replacement for UDP STUN queries.
+ func ProbeHandler(w http.ResponseWriter, r *http.Request) {

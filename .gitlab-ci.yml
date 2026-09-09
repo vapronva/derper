@@ -7,64 +7,96 @@ stages:
 include:
   - component: $CI_SERVER_FQDN/ci/security/bundle@1
   - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
-    inputs:
-      name: alpine
+    inputs: &build-inputs
+      name: alpine-tag
       build_needs:
         - job: detect version
           artifacts: true
       image: derper-alpine
       tags: $DERP_TAGS
       dockerfile: Dockerfile.alpine
-      patches_dir: src/patches
-      patches_target: src/tailscale
+      build_args: --build-arg TAILSCALE_SOURCE=$TAILSCALE_SOURCE
       architectures: linux/amd64,linux/arm64
       scan_tag: latest
-      rules_changes:
+      rules_changes: &build-changes
         - Dockerfile.alpine
         - Dockerfile.fedora
         - .containerignore
+        - .gitmodules
+        - src/apply-patches.sh
         - src/patches/**/*
         - src/tailscale
+        - src/tailscale-main
         - .gitlab-ci.yml
   - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
     inputs:
-      name: fedora
-      build_needs:
-        - job: detect version
-          artifacts: true
+      <<: *build-inputs
+      name: alpine-main
+      tags: main
+      scan_tag: main
+  - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
+    inputs:
+      <<: *build-inputs
+      name: alpine-tag-performance
+      tags: $DERP_PERFORMANCE_TAGS
+      scan_tag: performance
+  - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
+    inputs:
+      <<: *build-inputs
+      name: alpine-main-performance
+      tags: main-performance
+      scan_tag: main-performance
+  - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
+    inputs:
+      <<: *build-inputs
+      name: fedora-tag
       image: derper-fedora
-      tags: $DERP_TAGS
       dockerfile: Dockerfile.fedora
-      patches_dir: src/patches
-      patches_target: src/tailscale
-      architectures: linux/amd64,linux/arm64
-      scan_tag: latest
-      rules_changes:
-        - Dockerfile.alpine
-        - Dockerfile.fedora
-        - .containerignore
-        - src/patches/**/*
-        - src/tailscale
-        - .gitlab-ci.yml
+  - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
+    inputs:
+      <<: *build-inputs
+      name: fedora-main
+      image: derper-fedora
+      dockerfile: Dockerfile.fedora
+      tags: main
+      scan_tag: main
+  - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
+    inputs:
+      <<: *build-inputs
+      name: fedora-tag-performance
+      image: derper-fedora
+      dockerfile: Dockerfile.fedora
+      tags: $DERP_PERFORMANCE_TAGS
+      scan_tag: performance
+  - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
+    inputs:
+      <<: *build-inputs
+      name: fedora-main-performance
+      image: derper-fedora
+      dockerfile: Dockerfile.fedora
+      tags: main-performance
+      scan_tag: main-performance
 
-.fetch-submodule: &fetch-submodule
+.fetch-submodule:
   variables:
     GIT_SUBMODULE_STRATEGY: recursive
     GIT_SUBMODULE_DEPTH: "1"
+    GIT_SUBMODULE_PATHS: $TAILSCALE_SOURCE
 
 detect version:
+  extends: .fetch-submodule
   stage: test
   image: docker.io/library/alpine:3
-  <<: *fetch-submodule
+  variables:
+    TAILSCALE_SOURCE: src/tailscale
   script:
     - |
       VERSION="$(cat src/tailscale/VERSION.txt)"
-      MAJOR="$(echo "$VERSION" | cut -d. -f1)"
-      MINOR="$(echo "$VERSION" | cut -d. -f1-2)"
+      MAJOR="${VERSION%%.*}"
+      MINOR="${VERSION%.*}"
       DERP_TAGS="latest,$MAJOR,$MINOR,$VERSION"
-      echo "Tailscale (pinned submodule): $VERSION"
-      echo "Generated tags: $DERP_TAGS"
-      echo "DERP_TAGS=$DERP_TAGS" > derp.env
+      DERP_PERFORMANCE_TAGS="performance,latest-performance,$MAJOR-performance,$MINOR-performance,$VERSION-performance"
+      printf 'DERP_TAGS=%s\nDERP_PERFORMANCE_TAGS=%s\n' "$DERP_TAGS" "$DERP_PERFORMANCE_TAGS" > derp.env
     - cat derp.env
   artifacts:
     reports:
@@ -73,16 +105,51 @@ detect version:
     - if: $CI_PIPELINE_SOURCE == "schedule"
     - if: $CI_COMMIT_TAG
     - if: $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH
-      changes:
-        - Dockerfile.alpine
-        - Dockerfile.fedora
-        - .containerignore
-        - src/patches/**/*
-        - src/tailscale
-        - .gitlab-ci.yml
+      changes: *build-changes
 
-build alpine:
-  <<: *fetch-submodule
+.build-tag:
+  extends: .fetch-submodule
+  variables:
+    TAILSCALE_SOURCE: src/tailscale
+    TAILSCALE_CHANNEL: tag
+    PATCH_VARIANT: light
+  before_script:
+    - bash src/apply-patches.sh "$TAILSCALE_CHANNEL" "$PATCH_VARIANT"
 
-build fedora:
-  <<: *fetch-submodule
+.build-main:
+  extends: .build-tag
+  variables:
+    TAILSCALE_SOURCE: src/tailscale-main
+    TAILSCALE_CHANNEL: main
+
+build alpine-tag:
+  extends: .build-tag
+
+build alpine-main:
+  extends: .build-main
+
+build alpine-tag-performance:
+  extends: .build-tag
+  variables:
+    PATCH_VARIANT: performance
+
+build alpine-main-performance:
+  extends: .build-main
+  variables:
+    PATCH_VARIANT: performance
+
+build fedora-tag:
+  extends: .build-tag
+
+build fedora-main:
+  extends: .build-main
+
+build fedora-tag-performance:
+  extends: .build-tag
+  variables:
+    PATCH_VARIANT: performance
+
+build fedora-main-performance:
+  extends: .build-main
+  variables:
+    PATCH_VARIANT: performance

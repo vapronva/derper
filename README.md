@@ -25,7 +25,16 @@ This project includes components from:
 
 ### To `derper` Itself ([`src/patches`](./src/patches))
 
-- [`ace-configurable-allowed-targets.patch`](./src/patches/ace-configurable-allowed-targets.patch) — make the embedded ACE proxy's allowed `CONNECT` target configurable via a `-ace-allowed-target` flag
+[`common`](./src/patches/common) is applied to every image; [`tag`](./src/patches/tag) and [`main`](./src/patches/main) hold the performance patches, applied only to the performance images of their respective source pin.
+
+- [`ace-configurable-allowed-targets`](./src/patches/common/ace-configurable-allowed-targets.patch): makes the embedded ACE proxy's allowed `CONNECT` target configurable via `-ace-allowed-target`
+- `derp-throughput` ([release](./src/patches/tag/derp-throughput.patch), [main](./src/patches/main/derp-throughput.patch)):
+  - 16 KiB pooled write buffers (up from 2 KiB)
+  - debug logs behind a flag check instead of a formatted call per packet
+  - exact unique-sender counter, dropping the per-packet `HyperLogLog` insert and its dependency
+  - drop attributed to the packet's real sender, and reconnecting peers given a fresh peer-gone watcher instead of being skipped as already seen
+- [`derp-connection-handoff`](./src/patches/tag/derp-connection-handoff.patch) (release only since `main` already does this): serve the hijacked connection on its own goroutine so `net/http` request state is not pinned for the life of the session
+- [`derp-reader-buffer`](./src/patches/main/derp-reader-buffer.patch) (main only): 4 KiB standing read buffer, up from 1 KiB, matching the release build
 
 ## Container Images
 
@@ -34,8 +43,17 @@ This project includes components from:
 
 ### Tags for Container Images
 
-- `latest` — the currently pinned release
-- `1`, `1.102`, `1.102.3` — major / minor / full version of the pinned release (example)
+| Source         | Patches           | Tags                                                                                             |
+| -------------- | ----------------- | ------------------------------------------------------------------------------------------------ |
+| Pinned release | ACE               | `latest`, `1`, `1.102`, `1.102.3`                                                                |
+| Pinned main    | ACE only          | `main`                                                                                           |
+| Pinned release | ACE + performance | `performance`, `latest-performance`, `1-performance`, `1.102-performance`, `1.102.3-performance` |
+| Pinned main    | ACE + performance | `main-performance`                                                                               |
+
+### Source Pins
+
+- [`src/tailscale`](./src/tailscale) pins the release, currently `v1.102.3`.
+- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `3945b82f8a9550b54c33e61d4ed2227862d53e8a`.
 
 ### Example Usage of Container Images
 

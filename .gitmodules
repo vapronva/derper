@@ -2,3 +2,8 @@
 	path = src/tailscale
 	url = https://github.com/tailscale/tailscale.git
 	shallow = true
+[submodule "src/tailscale-main"]
+	path = src/tailscale-main
+	url = https://github.com/tailscale/tailscale.git
+	branch = main
+	shallow = true

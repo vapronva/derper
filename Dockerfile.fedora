@@ -5,10 +5,11 @@ FROM $TOOLS_IMAGE AS tools
 FROM docker.io/library/golang:1.27-trixie AS builder
 
 ARG MIRROR_GO_URL=""
+ARG TAILSCALE_SOURCE=src/tailscale
 
 WORKDIR /build
 
-COPY src/tailscale ./
+COPY $TAILSCALE_SOURCE ./
 
 RUN if [ -n "$MIRROR_GO_URL" ]; then go env -w GOPROXY="${MIRROR_GO_URL%/}|https://proxy.golang.org,direct"; fi
 
