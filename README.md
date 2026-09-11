@@ -45,15 +45,15 @@ This project includes components from:
 
 | Source         | Patches           | Tags                                                                                             |
 | -------------- | ----------------- | ------------------------------------------------------------------------------------------------ |
-| Pinned release | ACE               | `latest`, `1`, `1.102`, `1.102.3`                                                                |
+| Pinned release | ACE               | `latest`, `1`, `1.102`, `1.102.4`                                                                |
 | Pinned main    | ACE only          | `main`                                                                                           |
-| Pinned release | ACE + performance | `performance`, `latest-performance`, `1-performance`, `1.102-performance`, `1.102.3-performance` |
+| Pinned release | ACE + performance | `performance`, `latest-performance`, `1-performance`, `1.102-performance`, `1.102.4-performance` |
 | Pinned main    | ACE + performance | `main-performance`                                                                               |
 
 ### Source Pins
 
-- [`src/tailscale`](./src/tailscale) pins the release, currently `v1.102.3`.
-- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `3945b82f8a9550b54c33e61d4ed2227862d53e8a`.
+- [`src/tailscale`](./src/tailscale) pins the release, currently `v1.102.4`.
+- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `4b60ec876f412db46cb825ee46f4374380d5d631`.
 
 ### Example Usage of Container Images
 
