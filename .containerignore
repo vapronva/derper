@@ -1,4 +1,6 @@
-.git
+**
+!Dockerfile
+!LICENSE.md
+!src/
+!src/**
 **/.git
-src/patches
-*.md
