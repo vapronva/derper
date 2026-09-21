@@ -1,51 +1,101 @@
 diff --git a/cmd/derper/ace.go b/cmd/derper/ace.go
-index ae2d0cbeb..70c97d67a 100644
 --- a/cmd/derper/ace.go
 +++ b/cmd/derper/ace.go
-@@ -11,11 +11,23 @@
+@@ -10,11 +10,74 @@
+ 	"fmt"
  	"net"
  	"net/http"
++	"net/netip"
  	"strings"
-+	"sync"
++	"syscall"
  
  	"tailscale.com/derp/derpserver"
  	"tailscale.com/net/connectproxy"
++	"tailscale.com/util/dnsname"
 +	"tailscale.com/util/set"
  )
- 
-+var aceAllowedTargets = sync.OnceValue(func() set.Set[string] {
-+	s := set.Set[string]{}
-+	for h := range strings.SplitSeq(*flagACEAllowedTargets, ",") {
-+		if h = strings.TrimSpace(strings.ToLower(h)); h != "" {
-+			s.Add(h)
++
++var aceAllowedTargets set.Set[string]
++
++var aceBlockedPrefixes = []netip.Prefix{
++	netip.MustParsePrefix("0.0.0.0/8"),
++	netip.MustParsePrefix("100.64.0.0/10"),
++	netip.MustParsePrefix("192.0.0.0/24"),
++	netip.MustParsePrefix("192.0.2.0/24"),
++	netip.MustParsePrefix("192.88.99.0/24"),
++	netip.MustParsePrefix("198.18.0.0/15"),
++	netip.MustParsePrefix("198.51.100.0/24"),
++	netip.MustParsePrefix("203.0.113.0/24"),
++	netip.MustParsePrefix("240.0.0.0/4"),
++	netip.MustParsePrefix("2001::/23"),
++	netip.MustParsePrefix("2001:db8::/32"),
++	netip.MustParsePrefix("2002::/16"),
++	netip.MustParsePrefix("3fff::/20"),
++}
++
++func parseACETargets(value string) (set.Set[string], error) {
++	targets := set.Set[string]{}
++	for host := range strings.SplitSeq(value, ",") {
++		host = strings.ToLower(strings.TrimSpace(host))
++		if err := dnsname.ValidHostname(host); err != nil || strings.HasSuffix(host, ".") {
++			return nil, fmt.Errorf("invalid ACE hostname %q", host)
++		}
++		targets.Add(host)
++	}
++	return targets, nil
++}
++
++func isPublicACEAddress(ip netip.Addr) bool {
++	ip = ip.Unmap()
++	if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.Zone() != "" {
++		return false
++	}
++	if ip.Is6() && !netip.MustParsePrefix("2000::/3").Contains(ip) {
++		return false
++	}
++	for _, prefix := range aceBlockedPrefixes {
++		if prefix.Contains(ip) {
++			return false
 +		}
 +	}
-+	return s
-+})
++	return true
++}
 +
++var aceDialer = net.Dialer{
++	Control: func(_, address string, _ syscall.RawConn) error {
++		target, err := netip.ParseAddrPort(address)
++		if err != nil {
++			return err
++		}
++		if !isPublicACEAddress(target.Addr()) {
++			return fmt.Errorf("ACE target address %s is not public", target.Addr())
++		}
++		return nil
++	},
++}
+ 
  // serveConnect handles a CONNECT request for ACE support.
  func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request) {
- 	if !*flagACEEnabled {
-@@ -29,6 +41,8 @@ func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request)
- 		return
+@@ -30,6 +93,7 @@
  	}
  
-+	allowed := aceAllowedTargets()
-+
  	ch := &connectproxy.Handler{
++		Dial: aceDialer.DialContext,
  		Check: func(hostPort string) error {
  			host, port, err := net.SplitHostPort(hostPort)
-@@ -67,7 +81,7 @@ func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request)
+ 			if err != nil {
+@@ -65,9 +129,7 @@
+ 				// "CONNECT controlplane.tailscale.com:80 HTTP/1.1" if it wants.
+ 				return fmt.Errorf("only ports 443 and 80 are allowed")
  			}
- 			// TODO(bradfitz): make policy configurable from flags and/or come
- 			// from local tailscaled nodeAttrs
+-			// TODO(bradfitz): make policy configurable from flags and/or come
+-			// from local tailscaled nodeAttrs
 -			if !strings.HasSuffix(host, ".tailscale.com") || strings.Contains(host, "derp") {
-+			if !allowed.Contains(strings.ToLower(host)) {
++			if !aceAllowedTargets.Contains(strings.ToLower(host)) {
  				return errors.New("bad host")
  			}
  			return nil
 diff --git a/cmd/derper/derper.go b/cmd/derper/derper.go
-index bae4d9f01..35eeffc5d 100644
 --- a/cmd/derper/derper.go
 +++ b/cmd/derper/derper.go
 @@ -98,7 +98,8 @@
@@ -53,8 +103,200 @@ index bae4d9f01..35eeffc5d 100644
  
  	// ACE
 -	flagACEEnabled = flag.Bool("ace", false, "whether to enable embedded ACE server [experimental + in-development as of 2025-09-12; not yet documented]")
++	flagACEAllowedTargets = flag.String("ace-allowed-target", "controlplane.tailscale.com", "comma-separated control-plane hostnames for ACE (exact, case-insensitive match; public addresses only)")
 +	flagACEEnabled        = flag.Bool("ace", false, "whether to enable embedded ACE server [experimental + in-development as of 2025-09-12; not yet documented]")
-+	flagACEAllowedTargets = flag.String("ace-allowed-target", "controlplane.tailscale.com", "comma-separated list of control-plane hostnames the embedded ACE server may CONNECT to (exact, case-insensitive host match)")
  )
  
  var (
+@@ -188,6 +189,15 @@
+ 	cfg := loadConfig()
+ 
+ 	serveTLS := tsweb.IsProd443(*addr) || *certMode == "manual"
++	if *flagACEEnabled {
++		if !serveTLS {
++			log.Fatal("-ace requires a TLS listener")
++		}
++		aceAllowedTargets, err = parseACETargets(*flagACEAllowedTargets)
++		if err != nil {
++			log.Fatal(err)
++		}
++	}
+ 
+ 	s := derpserver.New(cfg.PrivateKey, log.Printf)
+ 	s.SetVerifyClient(*verifyClients)
+diff --git a/net/connectproxy/connectproxy.go b/net/connectproxy/connectproxy.go
+--- a/net/connectproxy/connectproxy.go
++++ b/net/connectproxy/connectproxy.go
+@@ -37,6 +37,11 @@
+ 		return
+ 	}
+ 
++	if r.ProtoMajor != 1 {
++		http.Error(w, "CONNECT requires HTTP/1", http.StatusHTTPVersionNotSupported)
++		return
++	}
++
+ 	dial := h.Dial
+ 	if dial == nil {
+ 		var d net.Dialer
+@@ -56,6 +61,12 @@
+ 		}
+ 	}
+ 
++	hj, ok := w.(http.Hijacker)
++	if !ok {
++		http.Error(w, "CONNECT hijack unavailable", http.StatusInternalServerError)
++		return
++	}
++
+ 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+ 	defer cancel()
+ 	back, err := dial(ctx, "tcp", hostPort)
+@@ -66,11 +77,6 @@
+ 	}
+ 	defer back.Close()
+ 
+-	hj, ok := w.(http.Hijacker)
+-	if !ok {
+-		http.Error(w, "CONNECT hijack unavailable", http.StatusInternalServerError)
+-		return
+-	}
+ 	c, br, err := hj.Hijack()
+ 	if err != nil {
+ 		logf("CONNECT hijack: %v", err)
+@@ -78,7 +84,11 @@
+ 	}
+ 	defer c.Close()
+ 
+-	io.WriteString(c, "HTTP/1.1 200 OK\r\n\r\n")
++	if _, err := io.WriteString(c, "HTTP/1.1 200 OK\r\n\r\n"); err != nil {
++		logf("CONNECT response: %v", err)
++		return
++	}
++	logf("CONNECT %s -> %s", r.RemoteAddr, hostPort)
+ 
+ 	errc := make(chan error, 2)
+ 	go func() {
+diff --git a/cmd/derper/ace_policy_test.go b/cmd/derper/ace_policy_test.go
+new file mode 100644
+--- /dev/null
++++ b/cmd/derper/ace_policy_test.go
+@@ -0,0 +1,65 @@
++package main
++
++import (
++	"context"
++	"net"
++	"net/netip"
++	"strings"
++	"testing"
++	"time"
++)
++
++func TestACEPublicAddresses(t *testing.T) {
++	for _, address := range []string{"8.8.8.8", "1.1.1.1", "2606:4700:4700::1111", "::ffff:8.8.8.8"} {
++		if !isPublicACEAddress(netip.MustParseAddr(address)) {
++			t.Errorf("public address rejected: %s", address)
++		}
++	}
++	for _, address := range []string{
++		"0.1.2.3", "10.0.0.1", "100.64.0.1", "127.0.0.1", "169.254.169.254",
++		"172.16.0.1", "192.0.0.1", "192.0.2.1", "192.168.0.1", "192.88.99.1",
++		"198.18.0.1", "198.51.100.1", "203.0.113.1", "224.0.0.1", "240.0.0.1",
++		"::", "::1", "::ffff:127.0.0.1", "fc00::1", "fe80::1", "ff02::1",
++		"64:ff9b::a00:1", "2001::1", "2001:db8::1", "2002:7f00:1::", "3fff::1",
++	} {
++		if isPublicACEAddress(netip.MustParseAddr(address)) {
++			t.Errorf("non-public address accepted: %s", address)
++		}
++	}
++}
++
++func TestACEDialRejectsBeforeConnect(t *testing.T) {
++	listener, err := net.Listen("tcp", "127.0.0.1:0")
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer listener.Close()
++	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
++	defer cancel()
++	conn, err := aceDialer.DialContext(ctx, "tcp", listener.Addr().String())
++	if conn != nil {
++		conn.Close()
++		t.Fatal("dial connected to loopback")
++	}
++	if err == nil || !strings.Contains(err.Error(), "is not public") {
++		t.Fatalf("dial error = %v", err)
++	}
++	listener.(*net.TCPListener).SetDeadline(time.Now().Add(20 * time.Millisecond))
++	conn, err = listener.Accept()
++	if err == nil {
++		conn.Close()
++		t.Fatal("private destination accepted a connection")
++	}
++}
++
++func TestACETargets(t *testing.T) {
++	targets, err := parseACETargets("CONTROLPLANE.TAILSCALE.COM, headscale.example.com ")
++	if err != nil || !targets.Contains("controlplane.tailscale.com") || !targets.Contains("headscale.example.com") {
++		t.Fatalf("targets = %v, error = %v", targets, err)
++	}
++	for _, value := range []string{"", "example.com,", "example.com:443", "example.com.", "https://example.com", "example com", "*.example.com"} {
++		if _, err := parseACETargets(value); err == nil {
++			t.Errorf("invalid target accepted: %q", value)
++		}
++	}
++}
+diff --git a/net/connectproxy/connectproxy_test.go b/net/connectproxy/connectproxy_test.go
+new file mode 100644
+--- /dev/null
++++ b/net/connectproxy/connectproxy_test.go
+@@ -0,0 +1,48 @@
++package connectproxy
++
++import (
++	"bufio"
++	"context"
++	"net"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++)
++
++func TestNoDialWithoutHijacker(t *testing.T) {
++	handler := &Handler{
++		Dial: func(context.Context, string, string) (net.Conn, error) {
++			t.Fatal("dialed before checking hijack support")
++			return nil, nil
++		},
++	}
++	response := httptest.NewRecorder()
++	handler.ServeHTTP(response, httptest.NewRequest(http.MethodConnect, "example.com:443", nil))
++	if response.Code != http.StatusInternalServerError {
++		t.Fatalf("status = %d", response.Code)
++	}
++}
++
++type unavailableHijacker struct {
++	http.ResponseWriter
++}
++
++func (unavailableHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
++	return nil, nil, http.ErrNotSupported
++}
++
++func TestNoDialForHTTP2WithWrappedWriter(t *testing.T) {
++	handler := &Handler{
++		Dial: func(context.Context, string, string) (net.Conn, error) {
++			t.Fatal("dialed for an HTTP/2 request")
++			return nil, nil
++		},
++	}
++	response := httptest.NewRecorder()
++	request := httptest.NewRequest(http.MethodConnect, "example.com:443", nil)
++	request.ProtoMajor = 2
++	handler.ServeHTTP(unavailableHijacker{response}, request)
++	if response.Code != http.StatusHTTPVersionNotSupported {
++		t.Fatalf("status = %d", response.Code)
++	}
++}

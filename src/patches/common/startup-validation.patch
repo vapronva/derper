@@ -1,0 +1,80 @@
+diff --git a/cmd/derper/derper.go b/cmd/derper/derper.go
+index fffd3d2..8558a28 100644
+--- a/cmd/derper/derper.go
++++ b/cmd/derper/derper.go
+@@ -47,6 +47,7 @@
+ 	"tailscale.com/tsweb"
+ 	"tailscale.com/types/key"
+ 	"tailscale.com/types/logger"
++	"tailscale.com/util/dnsname"
+ 	"tailscale.com/version"
+ 
+ 	// Support for prometheus varz in tsweb
+@@ -162,6 +163,9 @@ func writeNewConfig() config {
+ 
+ func main() {
+ 	flag.Parse()
++	if flag.NArg() != 0 {
++		log.Fatalf("unexpected positional arguments: %q", flag.Args())
++	}
+ 	if *versionFlag {
+ 		fmt.Println(version.Long())
+ 		return
+@@ -181,13 +185,6 @@ func main() {
+ 		log.Fatalf("invalid server address: %v", err)
+ 	}
+ 
+-	if *runSTUN {
+-		ss := stunserver.New(ctx)
+-		go ss.ListenAndServe(net.JoinHostPort(listenHost, fmt.Sprint(*stunPort)))
+-	}
+-
+-	cfg := loadConfig()
+-
+ 	serveTLS := tsweb.IsProd443(*addr) || *certMode == "manual"
+ 	if *flagACEEnabled {
+ 		if !serveTLS {
+@@ -199,6 +196,19 @@ func main() {
+ 		}
+ 	}
+ 
++	if serveTLS && net.ParseIP(*hostname) == nil {
++		if err := dnsname.ValidHostname(*hostname); err != nil {
++			log.Fatalf("invalid -hostname: %v", err)
++		}
++	}
++
++	if *runSTUN {
++		ss := stunserver.New(ctx)
++		go ss.ListenAndServe(net.JoinHostPort(listenHost, fmt.Sprint(*stunPort)))
++	}
++
++	cfg := loadConfig()
++
+ 	s := derpserver.New(cfg.PrivateKey, log.Printf)
+ 	s.SetVerifyClient(*verifyClients)
+ 	s.SetTailscaledSocketPath(*socket)
+diff --git a/cmd/derper/mesh.go b/cmd/derper/mesh.go
+index c07cfe9..de0eb5a 100644
+--- a/cmd/derper/mesh.go
++++ b/cmd/derper/mesh.go
+@@ -26,7 +26,7 @@ func startMesh(s *derpserver.Server) error {
+ 		return errors.New("--mesh-with requires --mesh-psk-file")
+ 	}
+ 	for hostTuple := range strings.SplitSeq(*meshWith, ",") {
+-		if err := startMeshWithHost(s, hostTuple); err != nil {
++		if err := startMeshWithHost(s, strings.TrimSpace(hostTuple)); err != nil {
+ 			return err
+ 		}
+ 	}
+@@ -47,6 +47,10 @@ func startMeshWithHost(s *derpserver.Server, hostTuple string) error {
+ 		dialHost = hostParts[0]
+ 	}
+ 
++	if host == "" || dialHost == "" {
++		return fmt.Errorf("empty hostname in mesh target %q", hostTuple)
++	}
++
+ 	logf := logger.WithPrefix(log.Printf, fmt.Sprintf("mesh(%q): ", host))
+ 	netMon := netmon.NewStatic() // good enough for cmd/derper; no need for netns fanciness
+ 	c, err := derphttp.NewClient(s.PrivateKey(), "https://"+host+"/derp", logf, netMon)

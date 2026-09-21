@@ -1,0 +1,155 @@
+diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
+index d0e2f6d..87c53c3 100644
+--- a/derp/derpserver/derpserver.go
++++ b/derp/derpserver/derpserver.go
+@@ -658,6 +658,11 @@ func (s *Server) Accept(ctx context.Context, nc derp.Conn, brw *bufio.ReadWriter
+ 	closed := make(chan struct{})
+ 
+ 	s.mu.Lock()
++	if s.closed {
++		s.mu.Unlock()
++		nc.Close()
++		return
++	}
+ 	s.accepts.Add(1)             // while holding s.mu for connNum read on next line
+ 	connNum := s.accepts.Value() // expvar sadly doesn't return new value on Add(1)
+ 	s.netConns[nc] = closed
+@@ -1479,7 +1484,7 @@ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, r
+ 		// limiter acts based on the format string, and we want to
+ 		// rate-limit per src/dst keys, not on the generic "dropped
+ 		// stuff" message.
+-		msg := fmt.Sprintf("drop (%s) %s -> %s", srcKey.ShortString(), reason, dstKey.ShortString())
++		msg := fmt.Sprintf("drop (%s) %s -> %s", reason, srcKey.ShortString(), dstKey.ShortString())
+ 		s.limitedLogf(msg)
+ 	}
+ 	s.debugLogf("dropping packet reason=%s dst=%s disco=%v", reason, dstKey, looksDisco)
+@@ -1499,7 +1504,7 @@ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
+ 	for attempt := range 3 {
+ 		select {
+ 		case <-dst.ctx.Done():
+-			s.recordDrop(p.bs, c.key, dstKey, dropReasonGoneDisconnected)
++			s.recordDrop(p.bs, p.src, dstKey, dropReasonGoneDisconnected)
+ 			dst.debugLogf("sendPkt attempt %d dropped, dst gone", attempt)
+ 			return nil
+ 		default:
+@@ -1513,7 +1518,7 @@ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
+ 
+ 		select {
+ 		case pkt := <-sendQueue:
+-			s.recordDrop(pkt.bs, c.key, dstKey, dropReasonQueueHead)
++			s.recordDrop(pkt.bs, pkt.src, dstKey, dropReasonQueueHead)
+ 			c.recordQueueTime(pkt.enqueuedAt)
+ 		default:
+ 		}
+@@ -1521,8 +1526,8 @@ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
+ 	// Failed to make room for packet. This can happen in a heavily
+ 	// contended queue with racing writers. Give up and tail-drop in
+ 	// this case to keep reader unblocked.
+-	s.recordDrop(p.bs, c.key, dstKey, dropReasonQueueTail)
+-	dst.debugLogf("sendPkt attempt %d dropped, queue full")
++	s.recordDrop(p.bs, p.src, dstKey, dropReasonQueueTail)
++	dst.debugLogf("sendPkt dropped after 3 attempts, queue full")
+ 
+ 	return nil
+ }
+@@ -1960,7 +1965,7 @@ func expMovingAverage(prev, newValue, alpha float64) float64 {
+ 
+ // recordQueueTime updates the average queue duration metric after a packet has been sent.
+ func (c *sclient) recordQueueTime(enqueuedAt time.Time) {
+-	elapsed := float64(c.s.clock.Since(enqueuedAt).Milliseconds())
++	elapsed := float64(c.s.clock.Since(enqueuedAt)) / float64(time.Millisecond)
+ 	for {
+ 		old := atomic.LoadUint64(c.s.avgQueueDuration)
+ 		newAvg := expMovingAverage(math.Float64frombits(old), elapsed, 0.1)
+@@ -2020,6 +2025,9 @@ func (c *sclient) sendLoop(ctx context.Context) error {
+ 		case <-ctx.Done():
+ 			return nil
+ 		case msg := <-c.peerGone:
++			if msg.reason == derp.PeerGoneReasonDisconnected {
++				c.sawSrc[msg.peer] = set.Handle{}
++			}
+ 			werr = c.sendPeerGone(msg.peer, msg.reason)
+ 			continue
+ 		case <-c.meshUpdate:
+@@ -2056,6 +2064,9 @@ func (c *sclient) sendLoop(ctx context.Context) error {
+ 		case <-ctx.Done():
+ 			return nil
+ 		case msg := <-c.peerGone:
++			if msg.reason == derp.PeerGoneReasonDisconnected {
++				c.sawSrc[msg.peer] = set.Handle{}
++			}
+ 			werr = c.sendPeerGone(msg.peer, msg.reason)
+ 		case <-c.meshUpdate:
+ 			werr = c.sendMeshUpdates()
+@@ -2259,7 +2270,7 @@ func (c *sclient) EstimatedUniqueSenders() uint64 {
+ //
+ // It must only be called from the sendLoop goroutine.
+ func (c *sclient) noteSendFromSrc(src key.NodePublic) {
+-	if _, ok := c.sawSrc[src]; ok {
++	if c.sawSrc[src] != (set.Handle{}) {
+ 		return
+ 	}
+ 	h := c.s.addPeerGoneFromRegionWatcher(src, c.onPeerGoneFromRegion)
+diff --git a/derp/derpserver/peergone_rewatch_test.go b/derp/derpserver/peergone_rewatch_test.go
+new file mode 100644
+index 0000000..027b070
+--- /dev/null
++++ b/derp/derpserver/peergone_rewatch_test.go
+@@ -0,0 +1,57 @@
++package derpserver
++
++import (
++	"net/http/httptest"
++	"testing"
++	"time"
++
++	"tailscale.com/derp"
++	"tailscale.com/derp/derphttp"
++	"tailscale.com/net/netmon"
++	"tailscale.com/types/key"
++	"tailscale.com/types/logger"
++)
++
++func TestRepeatedPeerGone(t *testing.T) {
++	s := New(key.NewNode(), t.Logf)
++	defer s.Close()
++	hs := httptest.NewServer(Handler(s))
++	defer hs.Close()
++	connect := func(priv key.NodePrivate) *derphttp.Client {
++		c, err := derphttp.NewClient(priv, hs.URL+"/derp", logger.Discard, netmon.NewStatic())
++		if err != nil {
++			t.Fatal(err)
++		}
++		t.Cleanup(func() { c.Close() })
++		if err := c.Connect(t.Context()); err != nil {
++			t.Fatal(err)
++		}
++		if _, err := c.Recv(); err != nil {
++			t.Fatal(err)
++		}
++		return c
++	}
++	receiver := connect(key.NewNode())
++	timeout := time.AfterFunc(10*time.Second, func() { receiver.Close() })
++	defer timeout.Stop()
++	senderKey := key.NewNode()
++	for attempt := range 3 {
++		sender := connect(senderKey)
++		if err := sender.Send(receiver.SelfPublicKey(), []byte("hello")); err != nil {
++			t.Fatal(err)
++		}
++		if packet, err := receiver.Recv(); err != nil {
++			t.Fatal(err)
++		} else if _, ok := packet.(derp.ReceivedPacket); !ok {
++			t.Fatalf("packet is %T", packet)
++		}
++		sender.Close()
++		msg, err := receiver.Recv()
++		if err != nil {
++			t.Fatalf("disconnect %d: %v", attempt+1, err)
++		}
++		if gone, ok := msg.(derp.PeerGoneMessage); !ok || gone.Peer != senderKey.Public() || gone.Reason != derp.PeerGoneReasonDisconnected {
++			t.Fatalf("disconnect %d: got %#v", attempt+1, msg)
++		}
++	}
++}
