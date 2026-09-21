@@ -1,0 +1,128 @@
+diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
+index 773f18e..482554f 100644
+--- a/derp/derpserver/derpserver.go
++++ b/derp/derpserver/derpserver.go
+@@ -85,9 +85,10 @@ func init() {
+ }
+ 
+ const (
+-	defaultPerClientSendQueueDepth = 32 // default packets buffered for sending
+-	DefaultTCPWiteTimeout          = 2 * time.Second
+-	privilegedWriteTimeout         = 30 * time.Second // for clients with the mesh key
++	defaultPerClientSendQueueDepth  = 256 // default packets buffered for sending
++	defaultPerClientSendQueueMaxAge = 5 * time.Millisecond
++	DefaultTCPWiteTimeout           = 2 * time.Second
++	privilegedWriteTimeout          = 30 * time.Second // for clients with the mesh key
+ )
+ 
+ // getPerClientSendQueueDepth returns the per-client send queue depth,
+@@ -101,6 +102,13 @@ func getPerClientSendQueueDepth() int {
+ 	return defaultPerClientSendQueueDepth
+ }
+ 
++func getPerClientSendQueueMaxAge() time.Duration {
++	if v, ok := envknob.LookupInt("TS_DEBUG_DERP_PER_CLIENT_SEND_QUEUE_MAX_AGE_MS"); ok {
++		return time.Duration(v) * time.Millisecond
++	}
++	return defaultPerClientSendQueueMaxAge
++}
++
+ // dupPolicy is a temporary (2021-08-30) mechanism to change the policy
+ // of how duplicate connection for the same key are handled.
+ type dupPolicy int8
+@@ -196,9 +204,10 @@ type Server struct {
+ 	// values that are not allowed to connect. Mesh peers are exempt.
+ 	disallowedAppNames set.Set[string]
+ 
+-	perClientSendQueueDepth int // Sets the client send queue depth for the server.
+-	tcpWriteTimeout         time.Duration
+-	clock                   tstime.Clock
++	perClientSendQueueDepth  int // Sets the client send queue depth for the server.
++	perClientSendQueueMaxAge time.Duration
++	tcpWriteTimeout          time.Duration
++	clock                    tstime.Clock
+ 
+ 	// sendQueueRingPool holds released pktQueue ring buffers, each a
+ 	// *[]pkt of length perClientSendQueueDepth. Most clients are idle
+@@ -421,6 +430,7 @@ func New(privateKey key.NodePrivate, logf logger.Logf) *Server {
+ 	genDroppedCounters()
+ 
+ 	s.perClientSendQueueDepth = getPerClientSendQueueDepth()
++	s.perClientSendQueueMaxAge = getPerClientSendQueueMaxAge()
+ 	return s
+ }
+ 
+@@ -544,6 +554,7 @@ func genDroppedCounters() {
+ 		dropReasonQueueTail,
+ 		dropReasonWriteError,
+ 		dropReasonDupClient,
++		dropReasonQueueStale,
+ 	}
+ 
+ 	for _, dr := range dropReasons {
+@@ -1393,12 +1404,7 @@ func (c *sclient) handleFrameForwardPacket(_ derp.FrameType, fl uint32) error {
+ 		dst.debugLogf("received forwarded packet from %s via %s", srcKey.ShortString(), c.key.ShortString())
+ 	}
+ 
+-	return c.sendPkt(dst, pkt{
+-		bs:         contents,
+-		buf:        buf,
+-		enqueuedAt: c.s.clock.Now(),
+-		src:        srcKey,
+-	})
++	return c.sendPkt(dst, pkt{bs: contents, buf: buf, src: srcKey})
+ }
+ 
+ // lookupDest returns the local client, mesh forwarder, or duplicate-client
+@@ -1477,13 +1483,7 @@ func (c *sclient) handleFrameSendPacket(_ derp.FrameType, fl uint32) error {
+ 		c.debugLogf("SendPacket for %s, sending directly", dstKey.ShortString())
+ 	}
+ 
+-	p := pkt{
+-		bs:         contents,
+-		buf:        buf,
+-		enqueuedAt: c.s.clock.Now(),
+-		src:        c.key,
+-	}
+-	return c.sendPkt(dst, p)
++	return c.sendPkt(dst, pkt{bs: contents, buf: buf, src: c.key})
+ }
+ 
+ // setRateLimit updates the receive rate limiter. When bytesPerSec is 0, or the
+@@ -1585,6 +1585,7 @@ type dropReasonKindLabels struct {
+ 	dropReasonQueueTail        dropReason = "queue_tail"          // destination queue is full, dropped packet at queue tail
+ 	dropReasonWriteError       dropReason = "write_error"         // OS write() failed
+ 	dropReasonDupClient        dropReason = "dup_client"          // the public key is connected 2+ times (active/active, fighting)
++	dropReasonQueueStale       dropReason = "queue_stale"         // destination queue held the packet past perClientSendQueueMaxAge
+ )
+ 
+ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, reason dropReason) {
+@@ -1616,6 +1617,7 @@ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, r
+ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
+ 	s := c.s
+ 	dstKey := dst.key
++	p.enqueuedAt = s.clock.Now()
+ 
+ 	q, pend := &dst.sendQueue, pendSendQueue
+ 	if disco.LooksLikeDiscoWrapper(p.bs) {
+@@ -2637,6 +2639,7 @@ func (c *sclient) writePending(pend writerPending) (frames int, carry writerPend
+ 		frames++
+ 	}
+ 	const queues = pendSendQueue | pendDiscoQueue
++	maxAge := c.s.perClientSendQueueMaxAge
+ 	for budget := max(c.s.perClientSendQueueDepth, 1); pend&queues != 0 && budget > 0; budget-- {
+ 		q, bit := &c.sendQueue, pendSendQueue
+ 		if pend&pendDiscoQueue != 0 && (pend&pendSendQueue == 0 || rand.IntN(2) == 0) {
+@@ -2649,6 +2652,12 @@ func (c *sclient) writePending(pend writerPending) (frames int, carry writerPend
+ 		if !ok {
+ 			continue
+ 		}
++		if maxAge > 0 && more && bit == pendSendQueue && c.s.clock.Since(msg.enqueuedAt) > maxAge {
++			c.s.recordDrop(msg.bs, msg.src, c.key, dropReasonQueueStale)
++			c.s.putPacketBuf(msg.buf)
++			c.recordQueueTime(msg.enqueuedAt)
++			continue
++		}
+ 		err := c.sendPacket(msg.src, msg.bs)
+ 		c.s.putPacketBuf(msg.buf)
+ 		if err != nil {
