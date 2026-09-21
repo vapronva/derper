@@ -27,16 +27,17 @@ This project includes components from:
 
 [`common`](./src/patches/common) and each source pin’s `common/` patches apply to every variant. The remaining [`tag`](./src/patches/tag) and [`main`](./src/patches/main) patches apply only to performance images.
 
-- [`ace-configurable-allowed-targets`](./src/patches/common/ace-configurable-allowed-targets.patch): makes the embedded ACE proxy's allowed `CONNECT` target configurable via `-ace-allowed-target`
-- `derp-correctness` ([release](./src/patches/tag/common/derp-correctness.patch), [main](./src/patches/main/common/derp-correctness.patch)): fixes reconnect notifications, shutdown races, drop attribution, and queue timing
-- [`startup-validation`](./src/patches/common/startup-validation.patch): rejects invalid TLS, ACE, and mesh configuration before startup
-- `derp-throughput` ([release](./src/patches/tag/derp-throughput.patch), [main](./src/patches/main/derp-throughput.patch)):
+- [`10-ace-configurable-allowed-targets`](./src/patches/common/10-ace-configurable-allowed-targets.patch): makes the embedded ACE proxy's allowed `CONNECT` target configurable via `-ace-allowed-target`
+- `10-derp-correctness` ([release](./src/patches/tag/common/10-derp-correctness.patch), [main](./src/patches/main/common/10-derp-correctness.patch)): fixes reconnect notifications, shutdown races, drop attribution, and queue timing
+- [`20-startup-validation`](./src/patches/common/20-startup-validation.patch): rejects invalid TLS, ACE, and mesh configuration before startup
+- `20-derp-throughput` ([release](./src/patches/tag/20-derp-throughput.patch), [main](./src/patches/main/20-derp-throughput.patch)):
   - 16 KiB pooled write buffers (up from 2 KiB)
   - debug logs behind a flag check instead of a formatted call per packet (already upstream on main)
   - exact unique-sender counter, dropping the per-packet `HyperLogLog` insert and its dependency
   - WebSocket connections handed off so HTTP request state is released
-- [`derp-connection-handoff`](./src/patches/tag/derp-connection-handoff.patch) (release only since `main` already does this): serve the hijacked connection on its own goroutine so `net/http` request state is not pinned for the life of the session
-- [`derp-reader-buffer`](./src/patches/main/derp-reader-buffer.patch) (main only): 4 KiB standing read buffer, up from 1 KiB, matching the release build
+- `30-derp-sendqueue-deadline` ([release](./src/patches/tag/30-derp-sendqueue-deadline.patch), [main](./src/patches/main/30-derp-sendqueue-deadline.patch)): 256-packet send queues that drop by age instead of only by depth
+- [`10-derp-connection-handoff`](./src/patches/tag/10-derp-connection-handoff.patch) (release only since `main` already does this): serve the hijacked connection on its own goroutine so `net/http` request state is not pinned for the life of the session
+- [`10-derp-reader-buffer`](./src/patches/main/10-derp-reader-buffer.patch) (main only): 4 KiB standing read buffer, up from 1 KiB, matching the release build
 
 ## Container Images
 
@@ -92,3 +93,10 @@ docker run -d \
 | `DERP_MESH_WITH`                       | _(empty)_                    | Comma-separated DERP hostnames to mesh with                                |
 | `DERP_ACE`                             | `false`                      | Enable the embedded ACE `CONNECT` proxy (`-ace`)                           |
 | `DERP_ACE_ALLOWED_TARGET`              | `controlplane.tailscale.com` | ACE allow-list of control-plane hostnames (`-ace-allowed-target`)          |
+
+#### Tuning via Environment Variables in Container Images
+
+| Variable                                         | Default | Description                                             |
+| ------------------------------------------------ | ------- | ------------------------------------------------------- |
+| `TS_DEBUG_DERP_PER_CLIENT_SEND_QUEUE_DEPTH`      | `256`   | Packets buffered per destination                        |
+| `TS_DEBUG_DERP_PER_CLIENT_SEND_QUEUE_MAX_AGE_MS` | `5`     | Queue age at which a packet is dropped; `0` disables it |
