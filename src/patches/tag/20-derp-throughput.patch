@@ -1,135 +1,76 @@
 diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
-index 87c53c3..22228eb 100644
+index 32aff34..e398e53 100644
 --- a/derp/derpserver/derpserver.go
 +++ b/derp/derpserver/derpserver.go
-@@ -37,7 +37,6 @@
+@@ -38,7 +38,6 @@
  	"sync/atomic"
  	"time"
  
 -	"github.com/axiomhq/hyperloglog"
  	"github.com/go4org/hashtriemap"
  	"go4.org/mem"
- 	"golang.org/x/sync/errgroup"
-@@ -1123,7 +1122,9 @@ func (c *sclient) run(ctx context.Context) error {
+ 	xrate "golang.org/x/time/rate"
+@@ -144,13 +143,6 @@ type Server struct {
+ 	debug       bool
+ 	localClient local.Client
  
- 	for {
- 		ft, fl, err := derp.ReadFrameHeader(c.br)
--		c.debugLogf("read frame type %d len %d err %v", ft, fl, err)
-+		if c.debug {
-+			c.logf("read frame type %d len %d err %v", ft, fl, err)
-+		}
- 		if err != nil {
- 			if errors.Is(err, io.EOF) {
- 				c.debugLogf("read EOF")
-@@ -1283,7 +1284,9 @@ func (c *sclient) handleFrameForwardPacket(_ derp.FrameType, fl uint32) error {
- 		return nil
+-	// trackSenderCardinality reports whether each client should keep a
+-	// HyperLogLog estimate of how many unique peers have sent it packets.
+-	// It is off by default and enabled by the TS_DERP_SENDER_CARDINALITY
+-	// environment variable, since the sketch costs memory and time on
+-	// the packet path for every connected client.
+-	trackSenderCardinality bool
+-
+ 	// onClientInfoForTest, if non-nil, is called with each connecting
+ 	// client's key and ClientInfo. It is set (before the server accepts
+ 	// any connections) via forTest.SetOnClientInfo and is nil outside
+@@ -426,7 +418,6 @@ func New(privateKey key.NodePrivate, logf logger.Logf) *Server {
+ 		clock:               tstime.StdClock{},
+ 		tcpWriteTimeout:     DefaultTCPWiteTimeout,
  	}
- 
--	dst.debugLogf("received forwarded packet from %s via %s", srcKey.ShortString(), c.key.ShortString())
-+	if dst.debug {
-+		dst.logf("received forwarded packet from %s via %s", srcKey.ShortString(), c.key.ShortString())
-+	}
- 
- 	return c.sendPkt(dst, pkt{
- 		bs:         contents,
-@@ -1341,10 +1344,8 @@ func (c *sclient) handleFrameSendPacket(_ derp.FrameType, fl uint32) error {
- 		if fwd != nil {
- 			s.packetsForwardedOut.Add(1)
- 			err := fwd.ForwardPacket(c.key, dstKey, contents)
--			c.debugLogf("SendPacket for %s, forwarding via %s: %v", dstKey.ShortString(), fwd, err)
--			if err != nil {
--				// TODO:
--				return nil
-+			if c.debug {
-+				c.logf("SendPacket for %s, forwarding via %s: %v", dstKey.ShortString(), fwd, err)
- 			}
- 			return nil
- 		}
-@@ -1355,10 +1356,14 @@ func (c *sclient) handleFrameSendPacket(_ derp.FrameType, fl uint32) error {
- 			c.requestPeerGoneWriteLimited(dstKey, contents, derp.PeerGoneReasonNotHere)
- 		}
- 		s.recordDrop(contents, c.key, dstKey, reason)
--		c.debugLogf("SendPacket for %s, dropping with reason=%s", dstKey.ShortString(), reason)
-+		if c.debug {
-+			c.logf("SendPacket for %s, dropping with reason=%s", dstKey.ShortString(), reason)
-+		}
- 		return nil
- 	}
--	c.debugLogf("SendPacket for %s, sending directly", dstKey.ShortString())
-+	if c.debug {
-+		c.logf("SendPacket for %s, sending directly", dstKey.ShortString())
-+	}
- 
- 	p := pkt{
- 		bs:         contents,
-@@ -1505,13 +1510,17 @@ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
- 		select {
- 		case <-dst.ctx.Done():
- 			s.recordDrop(p.bs, p.src, dstKey, dropReasonGoneDisconnected)
--			dst.debugLogf("sendPkt attempt %d dropped, dst gone", attempt)
-+			if dst.debug {
-+				dst.logf("sendPkt attempt %d dropped, dst gone", attempt)
-+			}
- 			return nil
- 		default:
- 		}
- 		select {
- 		case sendQueue <- p:
--			dst.debugLogf("sendPkt attempt %d enqueued", attempt)
-+			if dst.debug {
-+				dst.logf("sendPkt attempt %d enqueued", attempt)
-+			}
- 			return nil
- 		default:
- 		}
-@@ -1855,11 +1864,7 @@ type sclient struct {
- 	sawSrc map[key.NodePublic]set.Handle
- 	bw     *lazyBufioWriter
+-	s.trackSenderCardinality = envknob.Bool("TS_DERP_SENDER_CARDINALITY")
+ 	s.initMetacert()
+ 	s.packetsRecvDisco = s.packetsRecvByKind.Get(string(packetKindDisco))
+ 	s.packetsRecvOther = s.packetsRecvByKind.Get(string(packetKindOther))
+@@ -2101,13 +2092,7 @@ type sclient struct {
+ 	bw       *lazyBufioWriter
+ 	writeErr error // the write error that stopped the writer, if any; logged by stopWriter
  
 -	// senderCardinality estimates the number of unique peers that have
--	// sent packets to this client. Owned by sendLoop, protected by
--	// senderCardinalityMu for reads from other goroutines.
+-	// sent packets to this client. It is nil unless
+-	// [Server.trackSenderCardinality] is set, and then until the first
+-	// packet. Written by the writer goroutine ([sclient.sendPacket]),
+-	// guarded by senderCardinalityMu for [sclient.EstimatedUniqueSenders].
 -	senderCardinalityMu sync.Mutex
 -	senderCardinality   *hyperloglog.Sketch
 +	uniqueSenders atomic.Uint64
  
  	// Guarded by s.mu
  	//
-@@ -2006,8 +2011,6 @@ func (c *sclient) onSendLoopDone() {
- func (c *sclient) sendLoop(ctx context.Context) error {
- 	defer c.onSendLoopDone()
- 
--	c.senderCardinality = hyperloglog.New()
--
- 	jitter := rand.N(5 * time.Second)
- 	keepAliveTick, keepAliveTickChannel := c.s.clock.NewTicker(derp.KeepAlive + jitter)
- 	defer keepAliveTick.Stop()
-@@ -2226,7 +2229,9 @@ func (c *sclient) sendPacket(srcKey key.NodePublic, contents []byte) (err error)
- 			c.s.packetsSent.Add(1)
- 			c.s.bytesSent.Add(int64(len(contents)))
- 		}
--		c.debugLogf("sendPacket from %s: %v", srcKey.ShortString(), err)
-+		if c.debug {
-+			c.logf("sendPacket from %s: %v", srcKey.ShortString(), err)
-+		}
- 	}()
- 
- 	c.setWriteDeadline()
-@@ -2236,11 +2241,6 @@ func (c *sclient) sendPacket(srcKey key.NodePublic, contents []byte) (err error)
+@@ -2884,15 +2869,6 @@ func (c *sclient) sendPacket(srcKey key.NodePublic, contents []byte) (err error)
  	if withKey {
  		pktLen += key.NodePublicRawLen
  		c.noteSendFromSrc(srcKey)
--		if c.senderCardinality != nil {
+-		if c.s.trackSenderCardinality {
 -			c.senderCardinalityMu.Lock()
--			c.senderCardinality.Insert(srcKey.AppendTo(nil))
+-			if c.senderCardinality == nil {
+-				c.senderCardinality = hyperloglog.New()
+-			}
+-			var raw [key.NodePublicRawLen]byte
+-			c.senderCardinality.Insert(srcKey.AppendTo(raw[:0]))
 -			c.senderCardinalityMu.Unlock()
 -		}
  	}
  	if err = derp.WriteFrameHeader(c.bw.bw(), derp.FrameRecvPacket, uint32(pktLen)); err != nil {
  		return err
-@@ -2257,12 +2257,7 @@ func (c *sclient) sendPacket(srcKey key.NodePublic, contents []byte) (err error)
- // EstimatedUniqueSenders returns an estimate of the number of unique peers
- // that have sent packets to this client.
+@@ -2906,17 +2882,8 @@ func (c *sclient) sendPacket(srcKey key.NodePublic, contents []byte) (err error)
+ 	return err
+ }
+ 
+-// EstimatedUniqueSenders returns an estimate of the number of unique peers
+-// that have sent packets to this client. It returns 0 if sender
+-// cardinality tracking is disabled (the default; see
+-// [Server.trackSenderCardinality]).
  func (c *sclient) EstimatedUniqueSenders() uint64 {
 -	c.senderCardinalityMu.Lock()
 -	defer c.senderCardinalityMu.Unlock()
@@ -141,9 +82,9 @@ index 87c53c3..22228eb 100644
  }
  
  // noteSendFromSrc notes that we are about to write a packet
-@@ -2270,11 +2265,15 @@ func (c *sclient) EstimatedUniqueSenders() uint64 {
+@@ -2924,11 +2891,15 @@ func (c *sclient) EstimatedUniqueSenders() uint64 {
  //
- // It must only be called from the sendLoop goroutine.
+ // It must only be called from the writer goroutine ([sclient.runWriter]).
  func (c *sclient) noteSendFromSrc(src key.NodePublic) {
 -	if c.sawSrc[src] != (set.Handle{}) {
 +	h, seen := c.sawSrc[src]
@@ -159,7 +100,7 @@ index 87c53c3..22228eb 100644
  }
  
  // AddPacketForwarder registers fwd as a packet forwarder for dst.
-@@ -2640,7 +2639,7 @@ func (s *Server) ServeDebugTraffic(w http.ResponseWriter, r *http.Request) {
+@@ -3317,7 +3288,7 @@ func (s *Server) ServeDebugTraffic(w http.ResponseWriter, r *http.Request) {
  
  var bufioWriterPool = &sync.Pool{
  	New: func() any {
@@ -169,18 +110,10 @@ index 87c53c3..22228eb 100644
  }
  
 diff --git a/derp/derpserver/derpserver_test.go b/derp/derpserver/derpserver_test.go
-index afb329b..eb92813 100644
+index 7f884b9..5385ba2 100644
 --- a/derp/derpserver/derpserver_test.go
 +++ b/derp/derpserver/derpserver_test.go
-@@ -11,7 +11,6 @@
- 	"crypto/tls"
- 	"crypto/x509"
- 	"encoding/asn1"
--	"encoding/binary"
- 	"expvar"
- 	"fmt"
- 	"log"
-@@ -25,7 +24,6 @@
+@@ -33,7 +33,6 @@
  	"testing/synctest"
  	"time"
  
@@ -188,7 +121,7 @@ index afb329b..eb92813 100644
  	qt "github.com/frankban/quicktest"
  	"go4.org/mem"
  	"golang.org/x/time/rate"
-@@ -829,14 +827,13 @@ func TestServeDebugTrafficUniqueSenders(t *testing.T) {
+@@ -975,14 +974,13 @@ func TestServeDebugTrafficUniqueSenders(t *testing.T) {
  
  	clientKey := key.NewNode().Public()
  	c := &sclient{
@@ -207,7 +140,7 @@ index afb329b..eb92813 100644
  	}
  
  	s.mu.Lock()
-@@ -847,8 +844,8 @@ func TestServeDebugTrafficUniqueSenders(t *testing.T) {
+@@ -993,8 +991,8 @@ func TestServeDebugTrafficUniqueSenders(t *testing.T) {
  
  	estimate := c.EstimatedUniqueSenders()
  	t.Logf("Estimated unique senders: %d", estimate)
@@ -218,7 +151,7 @@ index afb329b..eb92813 100644
  	}
  }
  
-@@ -878,149 +875,6 @@ func TestGetPerClientSendQueueDepth(t *testing.T) {
+@@ -1031,149 +1029,6 @@ func TestGetPerClientSendQueueDepth(t *testing.T) {
  	}
  }
  
@@ -368,7 +301,7 @@ index afb329b..eb92813 100644
  func TestPerClientRateLimit(t *testing.T) {
  	t.Run("throttled", func(t *testing.T) {
  		synctest.Test(t, func(t *testing.T) {
-@@ -1646,23 +1500,20 @@ func BenchmarkLookupDestHashTrie(b *testing.B) {
+@@ -1799,25 +1654,22 @@ func BenchmarkLookupDestHashTrie(b *testing.B) {
  	})
  }
  
@@ -407,49 +340,75 @@ index afb329b..eb92813 100644
 -	})
 +	}
  }
-diff --git a/go.mod b/go.mod
-index 6c4eb1b..79f5024 100644
---- a/go.mod
-+++ b/go.mod
-@@ -16,7 +16,6 @@ require (
- 	github.com/aws/aws-sdk-go-v2/service/ec2 v1.316.1
- 	github.com/aws/aws-sdk-go-v2/service/s3 v1.75.3
- 	github.com/aws/aws-sdk-go-v2/service/ssm v1.45.0
--	github.com/axiomhq/hyperloglog v0.0.0-20240319100328-84253e514e02
- 	github.com/bradfitz/go-tool-cache v0.0.0-20260722201841-0bb331e19f64
- 	github.com/bradfitz/monogok v0.0.0-20260630033929-b1eef977b41f
- 	github.com/bradfitz/qemu-guest-kragent v0.0.0-20240513123539-55a43ea02a03
-@@ -198,7 +197,6 @@ require (
- 	github.com/containerd/typeurl/v2 v2.2.3 // indirect
- 	github.com/cyphar/filepath-securejoin v0.6.1 // indirect
- 	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
--	github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc // indirect
- 	github.com/docker/go-connections v0.6.0 // indirect
- 	github.com/docker/go-events v0.0.0-20250808211157-605354379745 // indirect
- 	github.com/docker/go-units v0.5.0 // indirect
-diff --git a/go.sum b/go.sum
-index ac10645..1df549f 100644
---- a/go.sum
-+++ b/go.sum
-@@ -186,8 +186,6 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.42.1 h1:F/M5Y9I3nwr2IEpshZgh1GeHpOIt
- github.com/aws/aws-sdk-go-v2/service/sts v1.42.1/go.mod h1:mTNxImtovCOEEuD65mKW7DCsL+2gjEH+RPEAexAzAio=
- github.com/aws/smithy-go v1.27.3 h1:F3Zb497UhhskkfpJmfkXswyo+t0sh9OTBnIHjogWbVY=
- github.com/aws/smithy-go v1.27.3/go.mod h1:YE2RhdIuDbA5E5bTdciG9KrW3+TiEONeUWCqxX9i1Fc=
--github.com/axiomhq/hyperloglog v0.0.0-20240319100328-84253e514e02 h1:bXAPYSbdYbS5VTy92NIUbeDI1qyggi+JYh5op9IFlcQ=
--github.com/axiomhq/hyperloglog v0.0.0-20240319100328-84253e514e02/go.mod h1:k08r+Yj1PRAmuayFiRK6MYuR5Ve4IuZtTfxErMIh0+c=
- github.com/beevik/ntp v0.2.0/go.mod h1:hIHWr+l3+/clUnF44zdK+CWW7fO8dR5cIylAQ76NRpg=
- github.com/beevik/ntp v0.3.0 h1:xzVrPrE4ziasFXgBVBZJDP0Wg/KpMwk2KHJ4Ba8GrDw=
- github.com/beevik/ntp v0.3.0/go.mod h1:hIHWr+l3+/clUnF44zdK+CWW7fO8dR5cIylAQ76NRpg=
-@@ -322,8 +320,6 @@ github.com/deckarep/golang-set/v2 v2.8.0 h1:swm0rlPCmdWn9mESxKOjWk8hXSqoxOp+Zlfu
- github.com/deckarep/golang-set/v2 v2.8.0/go.mod h1:VAky9rY/yGXJOLEDv3OMci+7wtDpOF4IN+y82NBOac4=
- github.com/denis-tingaikin/go-header v0.5.0 h1:SRdnP5ZKvcO9KKRP1KJrhFR3RrlGuD+42t4429eC9k8=
- github.com/denis-tingaikin/go-header v0.5.0/go.mod h1:mMenU5bWrok6Wl2UsZjy+1okegmwQ3UgWl4V1D8gjlY=
--github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc h1:8WFBn63wegobsYAX0YjD+8suexZDga5CctH4CCTx2+8=
--github.com/dgryski/go-metro v0.0.0-20180109044635-280f6062b5bc/go.mod h1:c9O8+fpSOX1DM8cPNSkX/qsBWdkD4yd2dpciOWQjpBw=
- github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/rVNCu3HqELle0jiPLLBs70cWOduZpkS1E78=
- github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
- github.com/digitalocean/go-smbios v0.0.0-20180907143718-390a4f403a8e h1:vUmf0yezR0y7jJ5pceLHthLaYf4bA5T14B6q39S4q2Q=
+ 
+ func TestPktQueue(t *testing.T) {
+@@ -2083,64 +1935,6 @@ func TestWriterBufferedWriteFrames(t *testing.T) {
+ 	}
+ }
+ 
+-// TestSenderCardinalityEnv checks that the writer keeps a unique sender
+-// estimate only when TS_DERP_SENDER_CARDINALITY is set.
+-func TestSenderCardinalityEnv(t *testing.T) {
+-	for _, enabled := range []bool{false, true} {
+-		t.Run(fmt.Sprintf("enabled=%v", enabled), func(t *testing.T) {
+-			envVal := ""
+-			if enabled {
+-				envVal = "1"
+-			}
+-			t.Setenv("TS_DERP_SENDER_CARDINALITY", envVal)
+-			s := New(key.NewNode(), t.Logf)
+-			defer s.Close()
+-			if s.trackSenderCardinality != enabled {
+-				t.Fatalf("trackSenderCardinality = %v; want %v", s.trackSenderCardinality, enabled)
+-			}
+-
+-			conn := newGatedConn()
+-			c := &sclient{
+-				s:    s,
+-				key:  key.NewNode().Public(),
+-				nc:   conn,
+-				bw:   &lazyBufioWriter{w: conn},
+-				logf: t.Logf,
+-			}
+-			c.runWriterFunc = c.runWriter
+-
+-			// Send one packet at a time from distinct sources, waiting
+-			// for each to reach the conn so its insert has happened.
+-			const numSenders = 10
+-			for range numSenders {
+-				if err := c.sendPkt(c, pkt{bs: []byte("hello"), src: key.NewNode().Public()}); err != nil {
+-					t.Fatalf("sendPkt: %v", err)
+-				}
+-				select {
+-				case <-conn.writes:
+-				case <-time.After(10 * time.Second):
+-					t.Fatal("timeout waiting for the writer to flush")
+-				}
+-				conn.gate <- struct{}{}
+-			}
+-
+-			got := c.EstimatedUniqueSenders()
+-			if !enabled {
+-				if got != 0 {
+-					t.Errorf("EstimatedUniqueSenders() = %d; want 0 when disabled", got)
+-				}
+-			} else if got < numSenders-2 || got > numSenders+2 {
+-				t.Errorf("EstimatedUniqueSenders() = %d; want ~%d", got, numSenders)
+-			}
+-
+-			c.stopWriter()
+-			if c.writeErr != nil {
+-				t.Errorf("writer: %v", c.writeErr)
+-			}
+-		})
+-	}
+-}
+-
+ func TestPacketBufPool(t *testing.T) {
+ 	s := &Server{}
+ 
 diff --git a/derp/derpserver/websocket.go b/derp/derpserver/websocket.go
+index 8bad080..1151387 100644
 --- a/derp/derpserver/websocket.go
 +++ b/derp/derpserver/websocket.go
 @@ -5,6 +5,7 @@
@@ -460,7 +419,7 @@ diff --git a/derp/derpserver/websocket.go b/derp/derpserver/websocket.go
  	"expvar"
  	"log"
  	"net/http"
-@@ -50,14 +51,17 @@
+@@ -50,14 +51,17 @@ func AddWebSocketSupport(s *Server, base http.Handler) http.Handler {
  			log.Printf("websocket.Accept: %v", err)
  			return
  		}
@@ -484,6 +443,7 @@ diff --git a/derp/derpserver/websocket.go b/derp/derpserver/websocket.go
  }
 diff --git a/derp/derpserver/websocket_handoff_test.go b/derp/derpserver/websocket_handoff_test.go
 new file mode 100644
+index 0000000..de70eec
 --- /dev/null
 +++ b/derp/derpserver/websocket_handoff_test.go
 @@ -0,0 +1,61 @@
@@ -548,3 +508,62 @@ new file mode 100644
 +		t.Fatalf("message = %T, error = %v", message, err)
 +	}
 +}
+diff --git a/go.mod b/go.mod
+index b91e970..d8db0b5 100644
+--- a/go.mod
++++ b/go.mod
+@@ -19,7 +19,6 @@ require (
+ 	github.com/aws/aws-sdk-go-v2/service/ssm v1.77.0
+ 	github.com/aws/aws-sdk-go-v2/service/sts v1.49.0
+ 	github.com/aws/smithy-go v1.28.1
+-	github.com/axiomhq/hyperloglog v0.2.6
+ 	github.com/benbjohnson/immutable v0.4.3
+ 	github.com/bradfitz/go-tool-cache v0.0.0-20260919185303-c660171c910c
+ 	github.com/bradfitz/monogok v0.0.0-20260630033929-b1eef977b41f
+@@ -269,7 +268,6 @@ require (
+ 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
+ 	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
+ 	github.com/denis-tingaikin/go-header v0.5.0 // indirect
+-	github.com/dgryski/go-metro v0.0.0-20250106013310-edb8663e5e33 // indirect
+ 	github.com/dlclark/regexp2/v2 v2.2.1 // indirect
+ 	github.com/docker/cli v29.7.2+incompatible // indirect
+ 	github.com/docker/docker-credential-helpers v0.9.5 // indirect
+@@ -381,7 +379,6 @@ require (
+ 	github.com/josharian/native v1.1.0 // indirect
+ 	github.com/json-iterator/go v1.1.12 // indirect
+ 	github.com/julz/importas v0.2.0 // indirect
+-	github.com/kamstrup/intmap v0.5.2 // indirect
+ 	github.com/karamaru-alpha/copyloopvar v1.2.2 // indirect
+ 	github.com/kenshaw/evdev v0.1.0 // indirect
+ 	github.com/kevinburke/ssh_config v1.2.0 // indirect
+diff --git a/go.sum b/go.sum
+index 6f98799..0e70d8b 100644
+--- a/go.sum
++++ b/go.sum
+@@ -174,8 +174,6 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.49.0 h1:N7Ey8obY3uSui+cxl0OUzFlFmkxS
+ github.com/aws/aws-sdk-go-v2/service/sts v1.49.0/go.mod h1:zMBwjSf4Pt8a1OHYiZ5rPD0PJRK1kQrUaxhS/Dbld8E=
+ github.com/aws/smithy-go v1.28.1 h1:R/nXH00c8qcfCzQVELtRw+eLQWtzv+VAIEFJ1/xxXlQ=
+ github.com/aws/smithy-go v1.28.1/go.mod h1:YE2RhdIuDbA5E5bTdciG9KrW3+TiEONeUWCqxX9i1Fc=
+-github.com/axiomhq/hyperloglog v0.2.6 h1:sRhvvF3RIXWQgAXaTphLp4yJiX4S0IN3MWTaAgZoRJw=
+-github.com/axiomhq/hyperloglog v0.2.6/go.mod h1:YjX/dQqCR/7QYX0g8mu8UZAjpIenz1FKM71UEsjFoTo=
+ github.com/beevik/ntp v0.2.0/go.mod h1:hIHWr+l3+/clUnF44zdK+CWW7fO8dR5cIylAQ76NRpg=
+ github.com/beevik/ntp v1.5.0 h1:y+uj/JjNwlY2JahivxYvtmv4ehfi3h74fAuABB9ZSM4=
+ github.com/beevik/ntp v1.5.0/go.mod h1:mJEhBrwT76w9D+IfOEGvuzyuudiW9E52U2BaTrMOYow=
+@@ -315,8 +313,6 @@ github.com/deckarep/golang-set/v2 v2.8.0 h1:swm0rlPCmdWn9mESxKOjWk8hXSqoxOp+Zlfu
+ github.com/deckarep/golang-set/v2 v2.8.0/go.mod h1:VAky9rY/yGXJOLEDv3OMci+7wtDpOF4IN+y82NBOac4=
+ github.com/denis-tingaikin/go-header v0.5.0 h1:SRdnP5ZKvcO9KKRP1KJrhFR3RrlGuD+42t4429eC9k8=
+ github.com/denis-tingaikin/go-header v0.5.0/go.mod h1:mMenU5bWrok6Wl2UsZjy+1okegmwQ3UgWl4V1D8gjlY=
+-github.com/dgryski/go-metro v0.0.0-20250106013310-edb8663e5e33 h1:ucRHb6/lvW/+mTEIGbvhcYU3S8+uSNkuMjx/qZFfhtM=
+-github.com/dgryski/go-metro v0.0.0-20250106013310-edb8663e5e33/go.mod h1:c9O8+fpSOX1DM8cPNSkX/qsBWdkD4yd2dpciOWQjpBw=
+ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/rVNCu3HqELle0jiPLLBs70cWOduZpkS1E78=
+ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
+ github.com/digitalocean/go-smbios v0.0.0-20180907143718-390a4f403a8e h1:vUmf0yezR0y7jJ5pceLHthLaYf4bA5T14B6q39S4q2Q=
+@@ -744,8 +740,6 @@ github.com/jtolds/gls v4.20.0+incompatible/go.mod h1:QJZ7F/aHp+rZTRtaJ1ow/lLfFfV
+ github.com/julienschmidt/httprouter v1.2.0/go.mod h1:SYymIcj16QtmaHHD7aYtjjsJG7VTCxuUUipMqKk8s4w=
+ github.com/julz/importas v0.2.0 h1:y+MJN/UdL63QbFJHws9BVC5RpA2iq0kpjrFajTGivjQ=
+ github.com/julz/importas v0.2.0/go.mod h1:pThlt589EnCYtMnmhmRYY/qn9lCf/frPOK+WMx3xiJY=
+-github.com/kamstrup/intmap v0.5.2 h1:qnwBm1mh4XAnW9W9Ue9tZtTff8pS6+s6iKF6JRIV2Dk=
+-github.com/kamstrup/intmap v0.5.2/go.mod h1:gWUVWHKzWj8xpJVFf5GC0O26bWmv3GqdnIX/LMT6Aq4=
+ github.com/karamaru-alpha/copyloopvar v1.2.2 h1:yfNQvP9YaGQR7VaWLYcfZUlRP2eo2vhExWKxD/fP6q0=
+ github.com/karamaru-alpha/copyloopvar v1.2.2/go.mod h1:oY4rGZqZ879JkJMtX3RRkcXRkmUvH0x35ykgaKgsgJY=
+ github.com/kballard/go-shellquote v0.0.0-20180428030007-95032a82bc51 h1:Z9n2FFNUXsshfwJMBgNA0RU6/i7WVaAegv3PtuIHPMs=

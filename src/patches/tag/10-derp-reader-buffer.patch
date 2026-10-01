@@ -1,0 +1,37 @@
+diff --git a/derp/derpserver/handler.go b/derp/derpserver/handler.go
+index 39fe987c5..a8421bb36 100644
+--- a/derp/derpserver/handler.go
++++ b/derp/derpserver/handler.go
+@@ -85,16 +85,11 @@ func Handler(s *Server) http.Handler {
+ 			ctx = IdealNodeContextKey.WithValue(ctx, v)
+ 		}
+ 
+-		// Replace the hijacked connection's 4KB bufio.Reader with a
+-		// smaller one; DERP frame payloads are read with io.ReadFull,
+-		// which bypasses the buffer for reads larger than it. Fast-start
+-		// clients send their auth frame with the HTTP request, so drain
+-		// any buffered bytes first, releasing the old reader when empty.
+ 		readConn := netConn
+ 		if brw.Reader.Buffered() != 0 {
+ 			readConn = netutil.NewDrainBufConn(netConn, brw.Reader)
+ 		}
+-		br := bufio.NewReaderSize(readConn, 1<<10)
++		br := bufio.NewReaderSize(readConn, 4<<10)
+ 		// The nil Writer makes Accept's internal lazyBufioWriter pull
+ 		// a pooled buffer on demand rather than retaining one per
+ 		// connection.
+diff --git a/derp/derpserver/handler_test.go b/derp/derpserver/handler_test.go
+index 0da22dd64..daf0988f5 100644
+--- a/derp/derpserver/handler_test.go
++++ b/derp/derpserver/handler_test.go
+@@ -152,8 +152,8 @@ func TestHandlerTLSReaderSize(t *testing.T) {
+ 			if p, ok := m.(derp.ReceivedPacket); !ok || !bytes.Equal(p.Data, payload) {
+ 				t.Fatalf("unexpected packet: %T", m)
+ 			}
+-			if size := sc.br.Size(); size != 1024 {
+-				t.Errorf("standing reader size = %d, want 1024", size)
++			if size := sc.br.Size(); size != 4096 {
++				t.Errorf("standing reader size = %d, want 4096", size)
+ 			}
+ 		})
+ 	}

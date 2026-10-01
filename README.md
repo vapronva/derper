@@ -29,15 +29,13 @@ This project includes components from:
 
 - [`10-ace-configurable-allowed-targets`](./src/patches/common/10-ace-configurable-allowed-targets.patch): makes the embedded ACE proxy's allowed `CONNECT` target configurable via `-ace-allowed-target`
 - `10-derp-correctness` ([release](./src/patches/tag/common/10-derp-correctness.patch), [main](./src/patches/main/common/10-derp-correctness.patch)): fixes reconnect notifications, shutdown races, drop attribution, and queue timing
+- `10-derp-reader-buffer` ([release](./src/patches/tag/10-derp-reader-buffer.patch), [main](./src/patches/main/10-derp-reader-buffer.patch)): 4 KiB standing read buffer, up from 1 KiB
 - [`20-startup-validation`](./src/patches/common/20-startup-validation.patch): rejects invalid TLS, ACE, and mesh configuration before startup
 - `20-derp-throughput` ([release](./src/patches/tag/20-derp-throughput.patch), [main](./src/patches/main/20-derp-throughput.patch)):
   - 16 KiB pooled write buffers (up from 2 KiB)
-  - debug logs behind a flag check instead of a formatted call per packet (already upstream on main)
   - exact unique-sender counter, dropping the per-packet `HyperLogLog` insert and its dependency
   - WebSocket connections handed off so HTTP request state is released
 - `30-derp-sendqueue-deadline` ([release](./src/patches/tag/30-derp-sendqueue-deadline.patch), [main](./src/patches/main/30-derp-sendqueue-deadline.patch)): 256-packet send queues that drop by age instead of only by depth
-- [`10-derp-connection-handoff`](./src/patches/tag/10-derp-connection-handoff.patch) (release only since `main` already does this): serve the hijacked connection on its own goroutine so `net/http` request state is not pinned for the life of the session
-- [`10-derp-reader-buffer`](./src/patches/main/10-derp-reader-buffer.patch) (main only): 4 KiB standing read buffer, up from 1 KiB, matching the release build
 
 ## Container Images
 
@@ -48,15 +46,15 @@ This project includes components from:
 
 | Source         | Patches              | Tags                                                                                             |
 | -------------- | -------------------- | ------------------------------------------------------------------------------------------------ |
-| Pinned release | Common               | `latest`, `1`, `1.102`, `1.102.4`                                                                |
+| Pinned release | Common               | `latest`, `1`, `1.104`, `1.104.0`                                                                |
 | Pinned main    | Common               | `main`                                                                                           |
-| Pinned release | Common + performance | `performance`, `latest-performance`, `1-performance`, `1.102-performance`, `1.102.4-performance` |
+| Pinned release | Common + performance | `performance`, `latest-performance`, `1-performance`, `1.104-performance`, `1.104.0-performance` |
 | Pinned main    | Common + performance | `main-performance`                                                                               |
 
 ### Source Pins
 
-- [`src/tailscale`](./src/tailscale) pins the release, currently `v1.102.4`.
-- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `bb94defdd0299ec26808e0a16559af066c56ca32`.
+- [`src/tailscale`](./src/tailscale) pins the release, currently `v1.104.0`.
+- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `d8c7cafeda21cacee2603e980b6ec820f3c63b8f`.
 
 ### Example Usage of Container Images
 

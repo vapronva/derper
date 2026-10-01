@@ -1,8 +1,8 @@
 diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
-index d0e2f6d..87c53c3 100644
+index b647d08..32aff34 100644
 --- a/derp/derpserver/derpserver.go
 +++ b/derp/derpserver/derpserver.go
-@@ -658,6 +658,11 @@ func (s *Server) Accept(ctx context.Context, nc derp.Conn, brw *bufio.ReadWriter
+@@ -776,6 +776,11 @@ func (s *Server) Accept(ctx context.Context, nc derp.Conn, brw *bufio.ReadWriter
  	closed := make(chan struct{})
  
  	s.mu.Lock()
@@ -14,7 +14,7 @@ index d0e2f6d..87c53c3 100644
  	s.accepts.Add(1)             // while holding s.mu for connNum read on next line
  	connNum := s.accepts.Value() // expvar sadly doesn't return new value on Add(1)
  	s.netConns[nc] = closed
-@@ -1479,7 +1484,7 @@ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, r
+@@ -1638,7 +1643,7 @@ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, r
  		// limiter acts based on the format string, and we want to
  		// rate-limit per src/dst keys, not on the generic "dropped
  		// stuff" message.
@@ -22,37 +22,17 @@ index d0e2f6d..87c53c3 100644
 +		msg := fmt.Sprintf("drop (%s) %s -> %s", reason, srcKey.ShortString(), dstKey.ShortString())
  		s.limitedLogf(msg)
  	}
- 	s.debugLogf("dropping packet reason=%s dst=%s disco=%v", reason, dstKey, looksDisco)
-@@ -1499,7 +1504,7 @@ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
- 	for attempt := range 3 {
- 		select {
- 		case <-dst.ctx.Done():
--			s.recordDrop(p.bs, c.key, dstKey, dropReasonGoneDisconnected)
-+			s.recordDrop(p.bs, p.src, dstKey, dropReasonGoneDisconnected)
- 			dst.debugLogf("sendPkt attempt %d dropped, dst gone", attempt)
- 			return nil
- 		default:
-@@ -1513,7 +1518,7 @@ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
- 
- 		select {
- 		case pkt := <-sendQueue:
--			s.recordDrop(pkt.bs, c.key, dstKey, dropReasonQueueHead)
-+			s.recordDrop(pkt.bs, pkt.src, dstKey, dropReasonQueueHead)
- 			c.recordQueueTime(pkt.enqueuedAt)
- 		default:
+ 	if s.debug {
+@@ -1662,7 +1667,7 @@ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
+ 		if s.perClientSendQueueDepth == 0 {
+ 			reason = dropReasonQueueTail
  		}
-@@ -1521,8 +1526,8 @@ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
- 	// Failed to make room for packet. This can happen in a heavily
- 	// contended queue with racing writers. Give up and tail-drop in
- 	// this case to keep reader unblocked.
--	s.recordDrop(p.bs, c.key, dstKey, dropReasonQueueTail)
--	dst.debugLogf("sendPkt attempt %d dropped, queue full")
-+	s.recordDrop(p.bs, p.src, dstKey, dropReasonQueueTail)
-+	dst.debugLogf("sendPkt dropped after 3 attempts, queue full")
- 
- 	return nil
- }
-@@ -1960,7 +1965,7 @@ func expMovingAverage(prev, newValue, alpha float64) float64 {
+-		s.recordDrop(p.bs, c.key, dstKey, reason)
++		s.recordDrop(p.bs, p.src, dstKey, reason)
+ 		s.putPacketBuf(p.buf)
+ 		if dst.debug {
+ 			dst.debugLogf("sendPkt dropped, reason=%s", reason)
+@@ -2307,7 +2312,7 @@ func expMovingAverage(prev, newValue, alpha float64) float64 {
  
  // recordQueueTime updates the average queue duration metric after a packet has been sent.
  func (c *sclient) recordQueueTime(enqueuedAt time.Time) {
@@ -61,35 +41,38 @@ index d0e2f6d..87c53c3 100644
  	for {
  		old := atomic.LoadUint64(c.s.avgQueueDuration)
  		newAvg := expMovingAverage(math.Float64frombits(old), elapsed, 0.1)
-@@ -2020,6 +2025,9 @@ func (c *sclient) sendLoop(ctx context.Context) error {
- 		case <-ctx.Done():
- 			return nil
- 		case msg := <-c.peerGone:
-+			if msg.reason == derp.PeerGoneReasonDisconnected {
-+				c.sawSrc[msg.peer] = set.Handle{}
+@@ -2662,6 +2667,9 @@ func (c *sclient) onKeepAliveTimer() {
+ func (c *sclient) writePending(pend writerPending) (frames int, carry writerPending, err error) {
+ 	if pend&pendPeerGone != 0 {
+ 		for _, m := range c.takePeerGonePending() {
++			if m.reason == derp.PeerGoneReasonDisconnected && c.sawSrc[m.peer] != (set.Handle{}) {
++				c.sawSrc[m.peer] = set.Handle{}
 +			}
- 			werr = c.sendPeerGone(msg.peer, msg.reason)
- 			continue
- 		case <-c.meshUpdate:
-@@ -2056,6 +2064,9 @@ func (c *sclient) sendLoop(ctx context.Context) error {
- 		case <-ctx.Done():
- 			return nil
- 		case msg := <-c.peerGone:
-+			if msg.reason == derp.PeerGoneReasonDisconnected {
-+				c.sawSrc[msg.peer] = set.Handle{}
-+			}
- 			werr = c.sendPeerGone(msg.peer, msg.reason)
- 		case <-c.meshUpdate:
- 			werr = c.sendMeshUpdates()
-@@ -2259,7 +2270,7 @@ func (c *sclient) EstimatedUniqueSenders() uint64 {
+ 			if err := c.sendPeerGone(m.peer, m.reason); err != nil {
+ 				return frames, 0, err
+ 			}
+@@ -2916,7 +2924,7 @@ func (c *sclient) EstimatedUniqueSenders() uint64 {
  //
- // It must only be called from the sendLoop goroutine.
+ // It must only be called from the writer goroutine ([sclient.runWriter]).
  func (c *sclient) noteSendFromSrc(src key.NodePublic) {
 -	if _, ok := c.sawSrc[src]; ok {
 +	if c.sawSrc[src] != (set.Handle{}) {
  		return
  	}
  	h := c.s.addPeerGoneFromRegionWatcher(src, c.onPeerGoneFromRegion)
+diff --git a/derp/derpserver/derpserver_test.go b/derp/derpserver/derpserver_test.go
+index d96aa48..7f884b9 100644
+--- a/derp/derpserver/derpserver_test.go
++++ b/derp/derpserver/derpserver_test.go
+@@ -1958,7 +1958,7 @@ func TestSendPktHeadDropAttribution(t *testing.T) {
+ 
+ 	logMu.Lock()
+ 	defer logMu.Unlock()
+-	want := fmt.Sprintf("drop (%s) %s -> %s", first.key.ShortString(), dropReasonQueueHead, dst.key.ShortString())
++	want := fmt.Sprintf("drop (%s) %s -> %s", dropReasonQueueHead, first.key.ShortString(), dst.key.ShortString())
+ 	if !slices.Contains(logs, want) {
+ 		t.Errorf("logs = %q; want to contain %q", logs, want)
+ 	}
 diff --git a/derp/derpserver/peergone_rewatch_test.go b/derp/derpserver/peergone_rewatch_test.go
 new file mode 100644
 index 0000000..027b070

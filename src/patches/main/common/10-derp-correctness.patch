@@ -1,8 +1,8 @@
 diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
-index 1933180..a2dd838 100644
+index b647d08..32aff34 100644
 --- a/derp/derpserver/derpserver.go
 +++ b/derp/derpserver/derpserver.go
-@@ -772,6 +772,11 @@ func (s *Server) Accept(ctx context.Context, nc derp.Conn, brw *bufio.ReadWriter
+@@ -776,6 +776,11 @@ func (s *Server) Accept(ctx context.Context, nc derp.Conn, brw *bufio.ReadWriter
  	closed := make(chan struct{})
  
  	s.mu.Lock()
@@ -14,7 +14,7 @@ index 1933180..a2dd838 100644
  	s.accepts.Add(1)             // while holding s.mu for connNum read on next line
  	connNum := s.accepts.Value() // expvar sadly doesn't return new value on Add(1)
  	s.netConns[nc] = closed
-@@ -1609,7 +1614,7 @@ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, r
+@@ -1638,7 +1643,7 @@ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, r
  		// limiter acts based on the format string, and we want to
  		// rate-limit per src/dst keys, not on the generic "dropped
  		// stuff" message.
@@ -23,7 +23,7 @@ index 1933180..a2dd838 100644
  		s.limitedLogf(msg)
  	}
  	if s.debug {
-@@ -1633,7 +1638,7 @@ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
+@@ -1662,7 +1667,7 @@ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
  		if s.perClientSendQueueDepth == 0 {
  			reason = dropReasonQueueTail
  		}
@@ -32,7 +32,7 @@ index 1933180..a2dd838 100644
  		s.putPacketBuf(p.buf)
  		if dst.debug {
  			dst.debugLogf("sendPkt dropped, reason=%s", reason)
-@@ -2261,7 +2266,7 @@ func expMovingAverage(prev, newValue, alpha float64) float64 {
+@@ -2307,7 +2312,7 @@ func expMovingAverage(prev, newValue, alpha float64) float64 {
  
  // recordQueueTime updates the average queue duration metric after a packet has been sent.
  func (c *sclient) recordQueueTime(enqueuedAt time.Time) {
@@ -41,7 +41,7 @@ index 1933180..a2dd838 100644
  	for {
  		old := atomic.LoadUint64(c.s.avgQueueDuration)
  		newAvg := expMovingAverage(math.Float64frombits(old), elapsed, 0.1)
-@@ -2616,6 +2621,9 @@ func (c *sclient) onKeepAliveTimer() {
+@@ -2662,6 +2667,9 @@ func (c *sclient) onKeepAliveTimer() {
  func (c *sclient) writePending(pend writerPending) (frames int, carry writerPending, err error) {
  	if pend&pendPeerGone != 0 {
  		for _, m := range c.takePeerGonePending() {
@@ -51,7 +51,7 @@ index 1933180..a2dd838 100644
  			if err := c.sendPeerGone(m.peer, m.reason); err != nil {
  				return frames, 0, err
  			}
-@@ -2868,7 +2876,7 @@ func (c *sclient) EstimatedUniqueSenders() uint64 {
+@@ -2916,7 +2924,7 @@ func (c *sclient) EstimatedUniqueSenders() uint64 {
  //
  // It must only be called from the writer goroutine ([sclient.runWriter]).
  func (c *sclient) noteSendFromSrc(src key.NodePublic) {
@@ -61,10 +61,10 @@ index 1933180..a2dd838 100644
  	}
  	h := c.s.addPeerGoneFromRegionWatcher(src, c.onPeerGoneFromRegion)
 diff --git a/derp/derpserver/derpserver_test.go b/derp/derpserver/derpserver_test.go
-index f1fe169..9883cbe 100644
+index d96aa48..7f884b9 100644
 --- a/derp/derpserver/derpserver_test.go
 +++ b/derp/derpserver/derpserver_test.go
-@@ -1884,7 +1884,7 @@ func TestSendPktHeadDropAttribution(t *testing.T) {
+@@ -1958,7 +1958,7 @@ func TestSendPktHeadDropAttribution(t *testing.T) {
  
  	logMu.Lock()
  	defer logMu.Unlock()
