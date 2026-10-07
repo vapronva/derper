@@ -1,5 +1,5 @@
 diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
-index e398e53..148f996 100644
+index 08b1cdf..fa60ac0 100644
 --- a/derp/derpserver/derpserver.go
 +++ b/derp/derpserver/derpserver.go
 @@ -85,9 +85,10 @@ func init() {
@@ -30,7 +30,7 @@ index e398e53..148f996 100644
  // dupPolicy is a temporary (2021-08-30) mechanism to change the policy
  // of how duplicate connection for the same key are handled.
  type dupPolicy int8
-@@ -196,9 +204,10 @@ type Server struct {
+@@ -207,9 +215,10 @@ type Server struct {
  	// values that are not allowed to connect. Mesh peers are exempt.
  	disallowedAppNames set.Set[string]
  
@@ -44,7 +44,7 @@ index e398e53..148f996 100644
  
  	// sendQueueRingPool holds released pktQueue ring buffers, each a
  	// *[]pkt of length perClientSendQueueDepth. Most clients are idle
-@@ -425,6 +434,7 @@ func New(privateKey key.NodePrivate, logf logger.Logf) *Server {
+@@ -438,6 +447,7 @@ func New(privateKey key.NodePrivate, logf logger.Logf) *Server {
  	genDroppedCounters()
  
  	s.perClientSendQueueDepth = getPerClientSendQueueDepth()
@@ -52,7 +52,7 @@ index e398e53..148f996 100644
  	return s
  }
  
-@@ -548,6 +558,7 @@ func genDroppedCounters() {
+@@ -561,6 +571,7 @@ func genDroppedCounters() {
  		dropReasonQueueTail,
  		dropReasonWriteError,
  		dropReasonDupClient,
@@ -60,7 +60,7 @@ index e398e53..148f996 100644
  	}
  
  	for _, dr := range dropReasons {
-@@ -1420,12 +1431,7 @@ func (c *sclient) handleFrameForwardPacket(_ derp.FrameType, fl uint32) error {
+@@ -1443,12 +1454,7 @@ func (c *sclient) handleFrameForwardPacket(_ derp.FrameType, fl uint32) error {
  		dst.debugLogf("received forwarded packet from %s via %s", srcKey.ShortString(), c.key.ShortString())
  	}
  
@@ -74,7 +74,7 @@ index e398e53..148f996 100644
  }
  
  // lookupDest returns the local client, mesh forwarder, or duplicate-client
-@@ -1506,13 +1512,7 @@ func (c *sclient) handleFrameSendPacket(_ derp.FrameType, fl uint32) error {
+@@ -1529,13 +1535,7 @@ func (c *sclient) handleFrameSendPacket(_ derp.FrameType, fl uint32) error {
  		c.debugLogf("SendPacket for %s, sending directly", dstKey.ShortString())
  	}
  
@@ -89,7 +89,7 @@ index e398e53..148f996 100644
  }
  
  // setRateLimit updates the receive rate limiter. When bytesPerSec is 0, or the
-@@ -1614,6 +1614,7 @@ type dropReasonKindLabels struct {
+@@ -1637,6 +1637,7 @@ type dropReasonKindLabels struct {
  	dropReasonQueueTail        dropReason = "queue_tail"          // destination queue is full, dropped packet at queue tail
  	dropReasonWriteError       dropReason = "write_error"         // OS write() failed
  	dropReasonDupClient        dropReason = "dup_client"          // the public key is connected 2+ times (active/active, fighting)
@@ -97,7 +97,7 @@ index e398e53..148f996 100644
  )
  
  func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, reason dropReason) {
-@@ -1645,6 +1646,7 @@ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, r
+@@ -1668,6 +1669,7 @@ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, r
  func (c *sclient) sendPkt(dst *sclient, p pkt) error {
  	s := c.s
  	dstKey := dst.key
@@ -105,7 +105,7 @@ index e398e53..148f996 100644
  
  	q, pend := &dst.sendQueue, pendSendQueue
  	if disco.LooksLikeDiscoWrapper(p.bs) {
-@@ -2683,6 +2685,7 @@ func (c *sclient) writePending(pend writerPending) (frames int, carry writerPend
+@@ -2706,6 +2708,7 @@ func (c *sclient) writePending(pend writerPending) (frames int, carry writerPend
  		frames++
  	}
  	const queues = pendSendQueue | pendDiscoQueue
@@ -113,7 +113,7 @@ index e398e53..148f996 100644
  	for budget := max(c.s.perClientSendQueueDepth, 1); pend&queues != 0 && budget > 0; budget-- {
  		q, bit := &c.sendQueue, pendSendQueue
  		if pend&pendDiscoQueue != 0 && (pend&pendSendQueue == 0 || rand.IntN(2) == 0) {
-@@ -2695,6 +2698,12 @@ func (c *sclient) writePending(pend writerPending) (frames int, carry writerPend
+@@ -2718,6 +2721,12 @@ func (c *sclient) writePending(pend writerPending) (frames int, carry writerPend
  		if !ok {
  			continue
  		}

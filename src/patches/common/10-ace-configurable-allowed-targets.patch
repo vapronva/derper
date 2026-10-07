@@ -1,8 +1,12 @@
 diff --git a/cmd/derper/ace.go b/cmd/derper/ace.go
-index ae2d0cb..80b7c68 100644
+index ae2d0cb..cba464a 100644
 --- a/cmd/derper/ace.go
 +++ b/cmd/derper/ace.go
-@@ -10,12 +10,75 @@
+@@ -7,15 +7,81 @@
+ 
+ import (
+ 	"errors"
++	"flag"
  	"fmt"
  	"net"
  	"net/http"
@@ -16,6 +20,8 @@ index ae2d0cb..80b7c68 100644
 +	"tailscale.com/util/set"
  )
  
++var flagACEAllowedTargets = flag.String("ace-allowed-target", "controlplane.tailscale.com", "comma-separated control-plane hostnames for ACE (exact, case-insensitive match; public addresses only)")
++
 +var aceAllowedTargets set.Set[string]
 +
 +var aceBlockedPrefixes = []netip.Prefix{
@@ -78,7 +84,7 @@ index ae2d0cb..80b7c68 100644
  // serveConnect handles a CONNECT request for ACE support.
  func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request) {
  	if !*flagACEEnabled {
-@@ -30,6 +93,7 @@ func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request)
+@@ -30,6 +96,7 @@ func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request)
  	}
  
  	ch := &connectproxy.Handler{
@@ -86,7 +92,7 @@ index ae2d0cb..80b7c68 100644
  		Check: func(hostPort string) error {
  			host, port, err := net.SplitHostPort(hostPort)
  			if err != nil {
-@@ -65,9 +129,7 @@ func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request)
+@@ -65,9 +132,7 @@ func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request)
  				// "CONNECT controlplane.tailscale.com:80 HTTP/1.1" if it wants.
  				return fmt.Errorf("only ports 443 and 80 are allowed")
  			}
@@ -98,20 +104,10 @@ index ae2d0cb..80b7c68 100644
  			}
  			return nil
 diff --git a/cmd/derper/derper.go b/cmd/derper/derper.go
-index 213a33f..e846b96 100644
+index 213a33f..65beaae 100644
 --- a/cmd/derper/derper.go
 +++ b/cmd/derper/derper.go
-@@ -100,7 +100,8 @@
- 	tcpWriteTimeout = flag.Duration("tcp-write-timeout", derpserver.DefaultTCPWiteTimeout, "TCP write timeout; 0 results in no timeout being set on writes")
- 
- 	// ACE
--	flagACEEnabled = flag.Bool("ace", false, "whether to enable embedded ACE server [experimental + in-development as of 2025-09-12; not yet documented]")
-+	flagACEAllowedTargets = flag.String("ace-allowed-target", "controlplane.tailscale.com", "comma-separated control-plane hostnames for ACE (exact, case-insensitive match; public addresses only)")
-+	flagACEEnabled        = flag.Bool("ace", false, "whether to enable embedded ACE server [experimental + in-development as of 2025-09-12; not yet documented]")
- )
- 
- var (
-@@ -190,6 +191,15 @@ func main() {
+@@ -190,6 +190,15 @@ func main() {
  	cfg := loadConfig()
  
  	serveTLS := tsweb.IsProd443(*addr) || *certMode == "manual"

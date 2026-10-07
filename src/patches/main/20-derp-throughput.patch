@@ -1,5 +1,5 @@
 diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
-index 32aff34..e398e53 100644
+index 230b1bd..08b1cdf 100644
 --- a/derp/derpserver/derpserver.go
 +++ b/derp/derpserver/derpserver.go
 @@ -38,7 +38,6 @@
@@ -24,7 +24,7 @@ index 32aff34..e398e53 100644
  	// onClientInfoForTest, if non-nil, is called with each connecting
  	// client's key and ClientInfo. It is set (before the server accepts
  	// any connections) via forTest.SetOnClientInfo and is nil outside
-@@ -426,7 +418,6 @@ func New(privateKey key.NodePrivate, logf logger.Logf) *Server {
+@@ -439,7 +431,6 @@ func New(privateKey key.NodePrivate, logf logger.Logf) *Server {
  		clock:               tstime.StdClock{},
  		tcpWriteTimeout:     DefaultTCPWiteTimeout,
  	}
@@ -32,7 +32,7 @@ index 32aff34..e398e53 100644
  	s.initMetacert()
  	s.packetsRecvDisco = s.packetsRecvByKind.Get(string(packetKindDisco))
  	s.packetsRecvOther = s.packetsRecvByKind.Get(string(packetKindOther))
-@@ -2101,13 +2092,7 @@ type sclient struct {
+@@ -2124,13 +2115,7 @@ type sclient struct {
  	bw       *lazyBufioWriter
  	writeErr error // the write error that stopped the writer, if any; logged by stopWriter
  
@@ -47,7 +47,7 @@ index 32aff34..e398e53 100644
  
  	// Guarded by s.mu
  	//
-@@ -2884,15 +2869,6 @@ func (c *sclient) sendPacket(srcKey key.NodePublic, contents []byte) (err error)
+@@ -2907,15 +2892,6 @@ func (c *sclient) sendPacket(srcKey key.NodePublic, contents []byte) (err error)
  	if withKey {
  		pktLen += key.NodePublicRawLen
  		c.noteSendFromSrc(srcKey)
@@ -63,7 +63,7 @@ index 32aff34..e398e53 100644
  	}
  	if err = derp.WriteFrameHeader(c.bw.bw(), derp.FrameRecvPacket, uint32(pktLen)); err != nil {
  		return err
-@@ -2906,17 +2882,8 @@ func (c *sclient) sendPacket(srcKey key.NodePublic, contents []byte) (err error)
+@@ -2929,17 +2905,8 @@ func (c *sclient) sendPacket(srcKey key.NodePublic, contents []byte) (err error)
  	return err
  }
  
@@ -82,7 +82,7 @@ index 32aff34..e398e53 100644
  }
  
  // noteSendFromSrc notes that we are about to write a packet
-@@ -2924,11 +2891,15 @@ func (c *sclient) EstimatedUniqueSenders() uint64 {
+@@ -2947,11 +2914,15 @@ func (c *sclient) EstimatedUniqueSenders() uint64 {
  //
  // It must only be called from the writer goroutine ([sclient.runWriter]).
  func (c *sclient) noteSendFromSrc(src key.NodePublic) {
@@ -100,7 +100,7 @@ index 32aff34..e398e53 100644
  }
  
  // AddPacketForwarder registers fwd as a packet forwarder for dst.
-@@ -3317,7 +3288,7 @@ func (s *Server) ServeDebugTraffic(w http.ResponseWriter, r *http.Request) {
+@@ -3342,7 +3313,7 @@ func (s *Server) ServeDebugTraffic(w http.ResponseWriter, r *http.Request) {
  
  var bufioWriterPool = &sync.Pool{
  	New: func() any {
@@ -509,7 +509,7 @@ index 0000000..de70eec
 +	}
 +}
 diff --git a/go.mod b/go.mod
-index b91e970..d8db0b5 100644
+index 6e58b0b..ad1b7eb 100644
 --- a/go.mod
 +++ b/go.mod
 @@ -19,7 +19,6 @@ require (
@@ -518,8 +518,8 @@ index b91e970..d8db0b5 100644
  	github.com/aws/smithy-go v1.28.1
 -	github.com/axiomhq/hyperloglog v0.2.6
  	github.com/benbjohnson/immutable v0.4.3
- 	github.com/bradfitz/go-tool-cache v0.0.0-20260919185303-c660171c910c
  	github.com/bradfitz/monogok v0.0.0-20260630033929-b1eef977b41f
+ 	github.com/bradfitz/qemu-guest-kragent v0.0.0-20240513123539-55a43ea02a03
 @@ -269,7 +268,6 @@ require (
  	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
  	github.com/deckarep/golang-set/v2 v2.8.0 // indirect
@@ -537,7 +537,7 @@ index b91e970..d8db0b5 100644
  	github.com/kenshaw/evdev v0.1.0 // indirect
  	github.com/kevinburke/ssh_config v1.2.0 // indirect
 diff --git a/go.sum b/go.sum
-index 6f98799..0e70d8b 100644
+index 75c0445..1d252c9 100644
 --- a/go.sum
 +++ b/go.sum
 @@ -174,8 +174,6 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.49.0 h1:N7Ey8obY3uSui+cxl0OUzFlFmkxS
@@ -549,7 +549,7 @@ index 6f98799..0e70d8b 100644
  github.com/beevik/ntp v0.2.0/go.mod h1:hIHWr+l3+/clUnF44zdK+CWW7fO8dR5cIylAQ76NRpg=
  github.com/beevik/ntp v1.5.0 h1:y+uj/JjNwlY2JahivxYvtmv4ehfi3h74fAuABB9ZSM4=
  github.com/beevik/ntp v1.5.0/go.mod h1:mJEhBrwT76w9D+IfOEGvuzyuudiW9E52U2BaTrMOYow=
-@@ -315,8 +313,6 @@ github.com/deckarep/golang-set/v2 v2.8.0 h1:swm0rlPCmdWn9mESxKOjWk8hXSqoxOp+Zlfu
+@@ -313,8 +311,6 @@ github.com/deckarep/golang-set/v2 v2.8.0 h1:swm0rlPCmdWn9mESxKOjWk8hXSqoxOp+Zlfu
  github.com/deckarep/golang-set/v2 v2.8.0/go.mod h1:VAky9rY/yGXJOLEDv3OMci+7wtDpOF4IN+y82NBOac4=
  github.com/denis-tingaikin/go-header v0.5.0 h1:SRdnP5ZKvcO9KKRP1KJrhFR3RrlGuD+42t4429eC9k8=
  github.com/denis-tingaikin/go-header v0.5.0/go.mod h1:mMenU5bWrok6Wl2UsZjy+1okegmwQ3UgWl4V1D8gjlY=
@@ -558,7 +558,7 @@ index 6f98799..0e70d8b 100644
  github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f h1:lO4WD4F/rVNCu3HqELle0jiPLLBs70cWOduZpkS1E78=
  github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cuUVRXasLTGF7a8hSLbxyZXjz+1KgoB3wDUb6vlszIc=
  github.com/digitalocean/go-smbios v0.0.0-20180907143718-390a4f403a8e h1:vUmf0yezR0y7jJ5pceLHthLaYf4bA5T14B6q39S4q2Q=
-@@ -744,8 +740,6 @@ github.com/jtolds/gls v4.20.0+incompatible/go.mod h1:QJZ7F/aHp+rZTRtaJ1ow/lLfFfV
+@@ -742,8 +738,6 @@ github.com/jtolds/gls v4.20.0+incompatible/go.mod h1:QJZ7F/aHp+rZTRtaJ1ow/lLfFfV
  github.com/julienschmidt/httprouter v1.2.0/go.mod h1:SYymIcj16QtmaHHD7aYtjjsJG7VTCxuUUipMqKk8s4w=
  github.com/julz/importas v0.2.0 h1:y+MJN/UdL63QbFJHws9BVC5RpA2iq0kpjrFajTGivjQ=
  github.com/julz/importas v0.2.0/go.mod h1:pThlt589EnCYtMnmhmRYY/qn9lCf/frPOK+WMx3xiJY=

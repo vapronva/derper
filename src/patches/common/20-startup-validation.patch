@@ -1,5 +1,5 @@
 diff --git a/cmd/derper/derper.go b/cmd/derper/derper.go
-index e846b96..89a490c 100644
+index 65beaae..c296e6d 100644
 --- a/cmd/derper/derper.go
 +++ b/cmd/derper/derper.go
 @@ -48,6 +48,7 @@
@@ -10,7 +10,7 @@ index e846b96..89a490c 100644
  	"tailscale.com/version"
  
  	// Support for prometheus varz in tsweb
-@@ -164,6 +165,9 @@ func writeNewConfig() config {
+@@ -163,6 +164,9 @@ func writeNewConfig() config {
  
  func main() {
  	flag.Parse()
@@ -20,7 +20,7 @@ index e846b96..89a490c 100644
  	if *versionFlag {
  		fmt.Println(version.Long())
  		return
-@@ -183,13 +187,6 @@ func main() {
+@@ -182,13 +186,6 @@ func main() {
  		log.Fatalf("invalid server address: %v", err)
  	}
  
@@ -34,7 +34,7 @@ index e846b96..89a490c 100644
  	serveTLS := tsweb.IsProd443(*addr) || *certMode == "manual"
  	if *flagACEEnabled {
  		if !serveTLS {
-@@ -201,6 +198,19 @@ func main() {
+@@ -200,6 +197,19 @@ func main() {
  		}
  	}
  
