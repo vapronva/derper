@@ -509,7 +509,7 @@ index 0000000..de70eec
 +	}
 +}
 diff --git a/go.mod b/go.mod
-index 6e58b0b..ad1b7eb 100644
+index b864742..b1b84ae 100644
 --- a/go.mod
 +++ b/go.mod
 @@ -19,7 +19,6 @@ require (
@@ -537,7 +537,7 @@ index 6e58b0b..ad1b7eb 100644
  	github.com/kenshaw/evdev v0.1.0 // indirect
  	github.com/kevinburke/ssh_config v1.2.0 // indirect
 diff --git a/go.sum b/go.sum
-index 75c0445..1d252c9 100644
+index 05f9c93..4f8b7f5 100644
 --- a/go.sum
 +++ b/go.sum
 @@ -174,8 +174,6 @@ github.com/aws/aws-sdk-go-v2/service/sts v1.49.0 h1:N7Ey8obY3uSui+cxl0OUzFlFmkxS

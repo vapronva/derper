@@ -54,7 +54,7 @@ This project includes components from:
 ### Source Pins
 
 - [`src/tailscale`](./src/tailscale) pins the release, currently `v1.104.1`.
-- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `1eb2bb62f3c5c0be002b0cacffb385fada013f25`.
+- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `5b226c7d1df791863b871bf0e47c3f23beeeea1e`.
 
 ### Example Usage of Container Images
 
