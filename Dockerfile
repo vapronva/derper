@@ -1,6 +1,6 @@
 ARG RUNTIME_IMAGE=docker.io/library/alpine:3
 
-FROM docker.io/library/golang:1.27-alpine AS builder
+FROM docker.io/library/golang:1.27.3-alpine AS builder
 
 RUN apk add --no-cache bash git
 
@@ -18,11 +18,14 @@ COPY src/ ./
 
 RUN if [ -n "$MIRROR_GO_URL" ]; then go env -w GOPROXY="${MIRROR_GO_URL%/}|https://proxy.golang.org,direct"; fi
 
-RUN bash ./apply-patches.sh "$TAILSCALE_CHANNEL" "$PATCH_VARIANT" && \
-    case "$TAILSCALE_CHANNEL" in tag) source_dir=tailscale ;; main) source_dir=tailscale-main ;; esac && \
+RUN case "$TAILSCALE_CHANNEL" in \
+        tag) source_dir=tailscale version_suffix="" ;; \
+        main) source_dir=tailscale-main version_suffix="+sha.${TAILSCALE_REVISION:?set TAILSCALE_REVISION to the main source commit}" ;; \
+        *) echo "Unknown TAILSCALE_CHANNEL: $TAILSCALE_CHANNEL" >&2; exit 1 ;; \
+    esac && \
+    bash ./apply-patches.sh "$PATCH_VARIANT" "$source_dir" && \
     cd "$source_dir" && \
-    version="$(cat VERSION.txt)" && \
-    if [ "$TAILSCALE_CHANNEL" = main ]; then version="$version+sha.${TAILSCALE_REVISION:?set TAILSCALE_REVISION to the main source commit}"; fi && \
+    version="$(cat VERSION.txt)$version_suffix" && \
     CGO_ENABLED=0 go build -trimpath \
     -ldflags="-s -w -X tailscale.com/version.longStamp=$version -X tailscale.com/version.shortStamp=$version" \
     -o /derper ./cmd/derper && \

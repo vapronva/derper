@@ -1,8 +1,8 @@
 diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
-index 08b1cdf..fa60ac0 100644
+index 7c7f6c1..06be142 100644
 --- a/derp/derpserver/derpserver.go
 +++ b/derp/derpserver/derpserver.go
-@@ -85,9 +85,10 @@ func init() {
+@@ -86,9 +86,10 @@ func init() {
  }
  
  const (
@@ -16,7 +16,7 @@ index 08b1cdf..fa60ac0 100644
  )
  
  // getPerClientSendQueueDepth returns the per-client send queue depth,
-@@ -101,6 +102,13 @@ func getPerClientSendQueueDepth() int {
+@@ -102,6 +103,13 @@ func getPerClientSendQueueDepth() int {
  	return defaultPerClientSendQueueDepth
  }
  
@@ -30,7 +30,7 @@ index 08b1cdf..fa60ac0 100644
  // dupPolicy is a temporary (2021-08-30) mechanism to change the policy
  // of how duplicate connection for the same key are handled.
  type dupPolicy int8
-@@ -207,9 +215,10 @@ type Server struct {
+@@ -215,9 +223,10 @@ type Server struct {
  	// values that are not allowed to connect. Mesh peers are exempt.
  	disallowedAppNames set.Set[string]
  
@@ -44,7 +44,7 @@ index 08b1cdf..fa60ac0 100644
  
  	// sendQueueRingPool holds released pktQueue ring buffers, each a
  	// *[]pkt of length perClientSendQueueDepth. Most clients are idle
-@@ -438,6 +447,7 @@ func New(privateKey key.NodePrivate, logf logger.Logf) *Server {
+@@ -447,6 +456,7 @@ func New(privateKey key.NodePrivate, logf logger.Logf) *Server {
  	genDroppedCounters()
  
  	s.perClientSendQueueDepth = getPerClientSendQueueDepth()
@@ -52,7 +52,7 @@ index 08b1cdf..fa60ac0 100644
  	return s
  }
  
-@@ -561,6 +571,7 @@ func genDroppedCounters() {
+@@ -570,6 +580,7 @@ func genDroppedCounters() {
  		dropReasonQueueTail,
  		dropReasonWriteError,
  		dropReasonDupClient,
@@ -60,7 +60,7 @@ index 08b1cdf..fa60ac0 100644
  	}
  
  	for _, dr := range dropReasons {
-@@ -1443,12 +1454,7 @@ func (c *sclient) handleFrameForwardPacket(_ derp.FrameType, fl uint32) error {
+@@ -1452,12 +1463,7 @@ func (c *sclient) handleFrameForwardPacket(_ derp.FrameType, fl uint32) error {
  		dst.debugLogf("received forwarded packet from %s via %s", srcKey.ShortString(), c.key.ShortString())
  	}
  
@@ -74,7 +74,7 @@ index 08b1cdf..fa60ac0 100644
  }
  
  // lookupDest returns the local client, mesh forwarder, or duplicate-client
-@@ -1529,13 +1535,7 @@ func (c *sclient) handleFrameSendPacket(_ derp.FrameType, fl uint32) error {
+@@ -1538,13 +1544,7 @@ func (c *sclient) handleFrameSendPacket(_ derp.FrameType, fl uint32) error {
  		c.debugLogf("SendPacket for %s, sending directly", dstKey.ShortString())
  	}
  
@@ -89,7 +89,7 @@ index 08b1cdf..fa60ac0 100644
  }
  
  // setRateLimit updates the receive rate limiter. When bytesPerSec is 0, or the
-@@ -1637,6 +1637,7 @@ type dropReasonKindLabels struct {
+@@ -1646,6 +1646,7 @@ type dropReasonKindLabels struct {
  	dropReasonQueueTail        dropReason = "queue_tail"          // destination queue is full, dropped packet at queue tail
  	dropReasonWriteError       dropReason = "write_error"         // OS write() failed
  	dropReasonDupClient        dropReason = "dup_client"          // the public key is connected 2+ times (active/active, fighting)
@@ -97,7 +97,7 @@ index 08b1cdf..fa60ac0 100644
  )
  
  func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, reason dropReason) {
-@@ -1668,6 +1669,7 @@ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, r
+@@ -1677,6 +1678,7 @@ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, r
  func (c *sclient) sendPkt(dst *sclient, p pkt) error {
  	s := c.s
  	dstKey := dst.key
@@ -105,7 +105,7 @@ index 08b1cdf..fa60ac0 100644
  
  	q, pend := &dst.sendQueue, pendSendQueue
  	if disco.LooksLikeDiscoWrapper(p.bs) {
-@@ -2706,6 +2708,7 @@ func (c *sclient) writePending(pend writerPending) (frames int, carry writerPend
+@@ -2721,6 +2723,7 @@ func (c *sclient) writePending(pend writerPending) (frames int, carry writerPend
  		frames++
  	}
  	const queues = pendSendQueue | pendDiscoQueue
@@ -113,7 +113,7 @@ index 08b1cdf..fa60ac0 100644
  	for budget := max(c.s.perClientSendQueueDepth, 1); pend&queues != 0 && budget > 0; budget-- {
  		q, bit := &c.sendQueue, pendSendQueue
  		if pend&pendDiscoQueue != 0 && (pend&pendSendQueue == 0 || rand.IntN(2) == 0) {
-@@ -2718,6 +2721,12 @@ func (c *sclient) writePending(pend writerPending) (frames int, carry writerPend
+@@ -2733,6 +2736,12 @@ func (c *sclient) writePending(pend writerPending) (frames int, carry writerPend
  		if !ok {
  			continue
  		}

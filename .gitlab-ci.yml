@@ -19,20 +19,13 @@ include:
       image: derper-alpine
       tags: $DERP_TAGS
       dockerfile: Dockerfile
-      build_args: --build-arg TAILSCALE_CHANNEL=tag --build-arg PATCH_VARIANT=light
       architectures: linux/amd64,linux/arm64
       scan_tag: latest
       rules_changes:
         - Dockerfile
-        - .dockerignore
-        - LICENSE.md
-        - src/entrypoint.sh
         - .containerignore
-        - .gitmodules
-        - src/apply-patches.sh
-        - src/patches/**/*
-        - src/tailscale
-        - src/tailscale-main
+        - LICENSE.md
+        - src/**/*
         - .gitlab-ci.yml
   - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
     inputs:

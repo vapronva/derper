@@ -1,0 +1,114 @@
+diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
+index 3ea91bb..7c7f6c1 100644
+--- a/derp/derpserver/derpserver.go
++++ b/derp/derpserver/derpserver.go
+@@ -3342,7 +3342,7 @@ func (s *Server) ServeDebugTraffic(w http.ResponseWriter, r *http.Request) {
+ 
+ var bufioWriterPool = &sync.Pool{
+ 	New: func() any {
+-		return bufio.NewWriterSize(io.Discard, 2<<10)
++		return bufio.NewWriterSize(io.Discard, 16<<10)
+ 	},
+ }
+ 
+diff --git a/derp/derpserver/websocket.go b/derp/derpserver/websocket.go
+index 8bad080..1151387 100644
+--- a/derp/derpserver/websocket.go
++++ b/derp/derpserver/websocket.go
+@@ -5,6 +5,7 @@
+ 
+ import (
+ 	"bufio"
++	"context"
+ 	"expvar"
+ 	"log"
+ 	"net/http"
+@@ -50,14 +51,17 @@ func AddWebSocketSupport(s *Server, base http.Handler) http.Handler {
+ 			log.Printf("websocket.Accept: %v", err)
+ 			return
+ 		}
+-		defer c.Close(websocket.StatusInternalError, "closing")
+ 		if c.Subprotocol() != "derp" {
+ 			c.Close(websocket.StatusPolicyViolation, "client must speak the derp subprotocol")
+ 			return
+ 		}
+ 		counterWebSocketAccepts.Add(1)
+-		wc := wsconn.NetConn(r.Context(), c, websocket.MessageBinary, r.RemoteAddr)
+-		brw := bufio.NewReadWriter(bufio.NewReader(wc), bufio.NewWriter(wc))
+-		s.Accept(r.Context(), wc, brw, r.RemoteAddr)
++		ctx := context.Background()
++		wc := wsconn.NetConn(ctx, c, websocket.MessageBinary, r.RemoteAddr)
++		brw := bufio.NewReadWriter(bufio.NewReader(wc), nil)
++		go func() {
++			defer c.Close(websocket.StatusInternalError, "closing")
++			serveHijackedConn(ctx, s, wc, brw)
++		}()
+ 	})
+ }
+diff --git a/derp/derpserver/websocket_handoff_test.go b/derp/derpserver/websocket_handoff_test.go
+new file mode 100644
+index 0000000..de70eec
+--- /dev/null
++++ b/derp/derpserver/websocket_handoff_test.go
+@@ -0,0 +1,61 @@
++package derpserver
++
++import (
++	"bufio"
++	"bytes"
++	"context"
++	"net/http"
++	"net/http/httptest"
++	"testing"
++	"time"
++
++	"github.com/coder/websocket"
++	"tailscale.com/derp"
++	"tailscale.com/net/wsconn"
++	"tailscale.com/types/key"
++)
++
++func TestWebSocketHandoff(t *testing.T) {
++	s := New(key.NewNode(), t.Logf)
++	defer s.Close()
++	returned := make(chan struct{})
++	handler := AddWebSocketSupport(s, Handler(s))
++	hs := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
++		handler.ServeHTTP(w, r)
++		close(returned)
++	}))
++	defer hs.Close()
++	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
++	defer cancel()
++	conn, _, err := websocket.Dial(ctx, hs.URL+"/derp", &websocket.DialOptions{
++		HTTPClient: hs.Client(), Subprotocols: []string{"derp"},
++	})
++	if err != nil {
++		t.Fatal(err)
++	}
++	defer conn.CloseNow()
++	select {
++	case <-returned:
++	case <-ctx.Done():
++		t.Fatal("HTTP handler retained for WebSocket lifetime")
++	}
++	wc := wsconn.NetConn(ctx, conn, websocket.MessageBinary, "client")
++	defer wc.Close()
++	privateKey := key.NewNode()
++	client, err := derp.NewClient(privateKey, wc, bufio.NewReadWriter(bufio.NewReader(wc), bufio.NewWriter(wc)), t.Logf)
++	if err != nil {
++		t.Fatal(err)
++	}
++	if _, err := client.Recv(); err != nil {
++		t.Fatal(err)
++	}
++	payload := bytes.Repeat([]byte("x"), 4096)
++	if err := client.Send(privateKey.Public(), payload); err != nil {
++		t.Fatal(err)
++	}
++	message, err := client.Recv()
++	packet, ok := message.(derp.ReceivedPacket)
++	if err != nil || !ok || !bytes.Equal(packet.Data, payload) {
++		t.Fatalf("message = %T, error = %v", message, err)
++	}
++}

@@ -1,5 +1,5 @@
 diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
-index aeb5924..230b1bd 100644
+index aeb5924..3ea91bb 100644
 --- a/derp/derpserver/derpserver.go
 +++ b/derp/derpserver/derpserver.go
 @@ -796,6 +796,11 @@ func (s *Server) Accept(ctx context.Context, nc derp.Conn, brw *bufio.ReadWriter
@@ -14,15 +14,6 @@ index aeb5924..230b1bd 100644
  	s.accepts.Add(1)             // while holding s.mu for connNum read on next line
  	connNum := s.accepts.Value() // expvar sadly doesn't return new value on Add(1)
  	s.netConns[nc] = closed
-@@ -1661,7 +1666,7 @@ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, r
- 		// limiter acts based on the format string, and we want to
- 		// rate-limit per src/dst keys, not on the generic "dropped
- 		// stuff" message.
--		msg := fmt.Sprintf("drop (%s) %s -> %s", srcKey.ShortString(), reason, dstKey.ShortString())
-+		msg := fmt.Sprintf("drop (%s) %s -> %s", reason, srcKey.ShortString(), dstKey.ShortString())
- 		s.limitedLogf(msg)
- 	}
- 	if s.debug {
 @@ -1685,7 +1690,7 @@ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
  		if s.perClientSendQueueDepth == 0 {
  			reason = dropReasonQueueTail
@@ -60,19 +51,6 @@ index aeb5924..230b1bd 100644
  		return
  	}
  	h := c.s.addPeerGoneFromRegionWatcher(src, c.onPeerGoneFromRegion)
-diff --git a/derp/derpserver/derpserver_test.go b/derp/derpserver/derpserver_test.go
-index d96aa48..7f884b9 100644
---- a/derp/derpserver/derpserver_test.go
-+++ b/derp/derpserver/derpserver_test.go
-@@ -1958,7 +1958,7 @@ func TestSendPktHeadDropAttribution(t *testing.T) {
- 
- 	logMu.Lock()
- 	defer logMu.Unlock()
--	want := fmt.Sprintf("drop (%s) %s -> %s", first.key.ShortString(), dropReasonQueueHead, dst.key.ShortString())
-+	want := fmt.Sprintf("drop (%s) %s -> %s", dropReasonQueueHead, first.key.ShortString(), dst.key.ShortString())
- 	if !slices.Contains(logs, want) {
- 		t.Errorf("logs = %q; want to contain %q", logs, want)
- 	}
 diff --git a/derp/derpserver/peergone_rewatch_test.go b/derp/derpserver/peergone_rewatch_test.go
 new file mode 100644
 index 0000000..027b070

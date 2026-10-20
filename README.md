@@ -19,23 +19,22 @@ This project includes components from:
 ### To the [Original `derper-docker` Dockerfile](https://github.com/kaaanata/derper-docker/blob/main/Dockerfile)
 
 - One shared [Dockerfile](./Dockerfile) for Alpine and Fedora
-- Changed runtime base image from `ubuntu` to `alpine:3`/`fedora:44` and builder from `golang:latest` to `golang:1.27-alpine`
+- Changed runtime base image from `ubuntu` to `alpine:3`/`fedora:44` and builder from `golang:latest` to `golang:1.27.3-alpine`
 - Added Go module mirror support via `MIRROR_GO_URL`
 - Build `derper` from a Tailscale source tree instead of `go install tailscale.com/cmd/derper@<version>`
 
 ### To `derper` Itself ([`src/patches`](./src/patches))
 
-[`common`](./src/patches/common) and each source pin’s `common/` patches apply to every variant. The remaining [`tag`](./src/patches/tag) and [`main`](./src/patches/main) patches apply only to performance images.
+[`common`](./src/patches/common) patches apply to every image and [`performance`](./src/patches/performance) patches only to performance images, on both source pins.
 
 - [`10-ace-configurable-allowed-targets`](./src/patches/common/10-ace-configurable-allowed-targets.patch): makes the embedded ACE proxy's allowed `CONNECT` target configurable via `-ace-allowed-target`
-- `10-derp-correctness` ([release](./src/patches/tag/common/10-derp-correctness.patch), [main](./src/patches/main/common/10-derp-correctness.patch)): fixes reconnect notifications, shutdown races, drop attribution, and queue timing
-- `10-derp-reader-buffer` ([release](./src/patches/tag/10-derp-reader-buffer.patch), [main](./src/patches/main/10-derp-reader-buffer.patch)): 4 KiB standing read buffer, up from 1 KiB
 - [`20-startup-validation`](./src/patches/common/20-startup-validation.patch): rejects invalid TLS, ACE, and mesh configuration before startup
-- `20-derp-throughput` ([release](./src/patches/tag/20-derp-throughput.patch), [main](./src/patches/main/20-derp-throughput.patch)):
+- [`30-derp-correctness`](./src/patches/common/30-derp-correctness.patch): fixes reconnect notifications, shutdown races, drop attribution, and queue timing
+- [`10-derp-reader-buffer`](./src/patches/performance/10-derp-reader-buffer.patch): 4 KiB standing read buffer, up from 1 KiB
+- [`20-derp-throughput`](./src/patches/performance/20-derp-throughput.patch):
   - 16 KiB pooled write buffers (up from 2 KiB)
-  - exact unique-sender counter, dropping the per-packet `HyperLogLog` insert and its dependency
   - WebSocket connections handed off so HTTP request state is released
-- `30-derp-sendqueue-deadline` ([release](./src/patches/tag/30-derp-sendqueue-deadline.patch), [main](./src/patches/main/30-derp-sendqueue-deadline.patch)): 256-packet send queues that drop by age instead of only by depth
+- [`30-derp-sendqueue-deadline`](./src/patches/performance/30-derp-sendqueue-deadline.patch): 256-packet send queues that drop by age instead of only by depth
 
 ## Container Images
 
@@ -54,7 +53,7 @@ This project includes components from:
 ### Source Pins
 
 - [`src/tailscale`](./src/tailscale) pins the release, currently `v1.104.1`.
-- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `a0a79982d427173bc31aec3448ecee73b6fe0c59`.
+- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `db03d4e19da508fe29c96043e5fd49156e577f60`.
 
 ### Example Usage of Container Images
 
@@ -94,7 +93,7 @@ docker run -d \
 
 #### Tuning via Environment Variables in Container Images
 
-| Variable                                         | Default | Description                                             |
-| ------------------------------------------------ | ------- | ------------------------------------------------------- |
-| `TS_DEBUG_DERP_PER_CLIENT_SEND_QUEUE_DEPTH`      | `256`   | Packets buffered per destination                        |
-| `TS_DEBUG_DERP_PER_CLIENT_SEND_QUEUE_MAX_AGE_MS` | `5`     | Queue age at which a packet is dropped; `0` disables it |
+| Variable                                         | Default                   | Description                                                                      |
+| ------------------------------------------------ | ------------------------- | -------------------------------------------------------------------------------- |
+| `TS_DEBUG_DERP_PER_CLIENT_SEND_QUEUE_DEPTH`      | `32` (performance: `256`) | Packets buffered per destination                                                 |
+| `TS_DEBUG_DERP_PER_CLIENT_SEND_QUEUE_MAX_AGE_MS` | `5`                       | Performance images only: queue age at which a packet is dropped; `0` disables it |
