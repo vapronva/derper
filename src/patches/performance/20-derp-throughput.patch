@@ -1,5 +1,5 @@
 diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
-index 3ea91bb..7c7f6c1 100644
+index 4ca3335..60f252a 100644
 --- a/derp/derpserver/derpserver.go
 +++ b/derp/derpserver/derpserver.go
 @@ -3342,7 +3342,7 @@ func (s *Server) ServeDebugTraffic(w http.ResponseWriter, r *http.Request) {

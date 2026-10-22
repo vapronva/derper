@@ -1,5 +1,5 @@
 diff --git a/cmd/derper/ace.go b/cmd/derper/ace.go
-index ae2d0cb..cba464a 100644
+index ae2d0cb..91470df 100644
 --- a/cmd/derper/ace.go
 +++ b/cmd/derper/ace.go
 @@ -7,15 +7,81 @@
@@ -54,7 +54,7 @@ index ae2d0cb..cba464a 100644
 +
 +func isPublicACEAddress(ip netip.Addr) bool {
 +	ip = ip.Unmap()
-+	if !ip.IsGlobalUnicast() || ip.IsPrivate() || ip.Zone() != "" {
++	if !ip.IsGlobalUnicast() || ip.IsPrivate() {
 +		return false
 +	}
 +	if ip.Is6() && !netip.MustParsePrefix("2000::/3").Contains(ip) {

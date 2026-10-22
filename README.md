@@ -45,15 +45,15 @@ This project includes components from:
 
 | Source         | Patches              | Tags                                                                                             |
 | -------------- | -------------------- | ------------------------------------------------------------------------------------------------ |
-| Pinned release | Common               | `latest`, `1`, `1.104`, `1.104.1`                                                                |
+| Pinned release | Common               | `latest`, `1`, `1.104`, `1.104.2`                                                                |
 | Pinned main    | Common               | `main`                                                                                           |
-| Pinned release | Common + performance | `performance`, `latest-performance`, `1-performance`, `1.104-performance`, `1.104.1-performance` |
+| Pinned release | Common + performance | `performance`, `latest-performance`, `1-performance`, `1.104-performance`, `1.104.2-performance` |
 | Pinned main    | Common + performance | `main-performance`                                                                               |
 
 ### Source Pins
 
-- [`src/tailscale`](./src/tailscale) pins the release, currently `v1.104.1`.
-- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `db03d4e19da508fe29c96043e5fd49156e577f60`.
+- [`src/tailscale`](./src/tailscale) pins the release, currently `v1.104.2`.
+- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `37fc7a7a7260e7d8231c04a568db613b09e25d88`.
 
 ### Example Usage of Container Images
 
