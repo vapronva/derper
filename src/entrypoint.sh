@@ -3,11 +3,11 @@ set -eu
 
 if [ -n "${TAILSCALE_DERPER_MESH_KEY:-}" ]; then
     DERP_MESH_PSK_FILE=/run/derper-mesh.key
+    rm -f "$DERP_MESH_PSK_FILE"
     (
         umask 077
         printf '%s' "$TAILSCALE_DERPER_MESH_KEY" >"$DERP_MESH_PSK_FILE"
     )
-    unset TAILSCALE_DERPER_MESH_KEY
 fi
 
 if [ -n "${DERP_MESH_PSK_FILE:-}" ]; then

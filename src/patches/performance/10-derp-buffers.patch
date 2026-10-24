@@ -1,5 +1,5 @@
 diff --git a/derp/derpserver/handler.go b/derp/derpserver/handler.go
-index 39fe987c5..a8421bb36 100644
+index 39fe987..a8421bb 100644
 --- a/derp/derpserver/handler.go
 +++ b/derp/derpserver/handler.go
 @@ -85,16 +85,11 @@ func Handler(s *Server) http.Handler {
@@ -20,8 +20,21 @@ index 39fe987c5..a8421bb36 100644
  		// The nil Writer makes Accept's internal lazyBufioWriter pull
  		// a pooled buffer on demand rather than retaining one per
  		// connection.
+diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
+index 4ca3335..60f252a 100644
+--- a/derp/derpserver/derpserver.go
++++ b/derp/derpserver/derpserver.go
+@@ -3342,7 +3342,7 @@ func (s *Server) ServeDebugTraffic(w http.ResponseWriter, r *http.Request) {
+ 
+ var bufioWriterPool = &sync.Pool{
+ 	New: func() any {
+-		return bufio.NewWriterSize(io.Discard, 2<<10)
++		return bufio.NewWriterSize(io.Discard, 16<<10)
+ 	},
+ }
+ 
 diff --git a/derp/derpserver/handler_test.go b/derp/derpserver/handler_test.go
-index 0da22dd64..daf0988f5 100644
+index 0da22dd..daf0988 100644
 --- a/derp/derpserver/handler_test.go
 +++ b/derp/derpserver/handler_test.go
 @@ -152,8 +152,8 @@ func TestHandlerTLSReaderSize(t *testing.T) {

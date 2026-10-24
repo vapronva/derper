@@ -27,14 +27,11 @@ This project includes components from:
 
 [`common`](./src/patches/common) patches apply to every image and [`performance`](./src/patches/performance) patches only to performance images, on both source pins.
 
-- [`10-ace-configurable-allowed-targets`](./src/patches/common/10-ace-configurable-allowed-targets.patch): makes the embedded ACE proxy's allowed `CONNECT` target configurable via `-ace-allowed-target`
-- [`20-startup-validation`](./src/patches/common/20-startup-validation.patch): rejects invalid TLS, ACE, and mesh configuration before startup
+- [`10-ace-configurable-allowed-targets`](./src/patches/common/10-ace-configurable-allowed-targets.patch): makes the embedded ACE proxy's allowed `CONNECT` targets configurable via `-ace-allowed-target` and dials public addresses only
+- [`20-startup-validation`](./src/patches/common/20-startup-validation.patch): rejects stray positional arguments, invalid TLS hostnames, and empty mesh targets at startup
 - [`30-derp-correctness`](./src/patches/common/30-derp-correctness.patch): fixes reconnect notifications, shutdown races, drop attribution, and queue timing
-- [`10-derp-reader-buffer`](./src/patches/performance/10-derp-reader-buffer.patch): 4 KiB standing read buffer, up from 1 KiB
-- [`20-derp-throughput`](./src/patches/performance/20-derp-throughput.patch):
-  - 16 KiB pooled write buffers (up from 2 KiB)
-  - WebSocket connections handed off so HTTP request state is released
-- [`30-derp-sendqueue-deadline`](./src/patches/performance/30-derp-sendqueue-deadline.patch): 256-packet send queues that drop by age instead of only by depth
+- [`10-derp-buffers`](./src/patches/performance/10-derp-buffers.patch): 4 KiB standing read buffer (up from 1 KiB) and 16 KiB pooled write buffers (up from 2 KiB)
+- [`20-derp-sendqueue-deadline`](./src/patches/performance/20-derp-sendqueue-deadline.patch): 256-packet send queues that drop by age instead of only by depth
 
 ## Container Images
 
@@ -53,7 +50,7 @@ This project includes components from:
 ### Source Pins
 
 - [`src/tailscale`](./src/tailscale) pins the release, currently `v1.104.2`.
-- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `37fc7a7a7260e7d8231c04a568db613b09e25d88`.
+- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `a6cffd0a6d11ef8aa3a0ca0ddc15879d0845605d`.
 
 ### Example Usage of Container Images
 

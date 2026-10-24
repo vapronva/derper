@@ -1,6 +1,4 @@
 **
-!Dockerfile
 !LICENSE.md
-!src/
-!src/**
+!src
 **/.git

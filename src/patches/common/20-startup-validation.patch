@@ -1,5 +1,5 @@
 diff --git a/cmd/derper/derper.go b/cmd/derper/derper.go
-index 65beaae..c296e6d 100644
+index fc5eb2e..d7d5190 100644
 --- a/cmd/derper/derper.go
 +++ b/cmd/derper/derper.go
 @@ -48,6 +48,7 @@
@@ -10,7 +10,7 @@ index 65beaae..c296e6d 100644
  	"tailscale.com/version"
  
  	// Support for prometheus varz in tsweb
-@@ -163,6 +164,9 @@ func writeNewConfig() config {
+@@ -169,6 +170,9 @@ func writeNewConfig() config {
  
  func main() {
  	flag.Parse()
@@ -20,40 +20,18 @@ index 65beaae..c296e6d 100644
  	if *versionFlag {
  		fmt.Println(version.Long())
  		return
-@@ -182,13 +186,6 @@ func main() {
- 		log.Fatalf("invalid server address: %v", err)
- 	}
- 
--	if *runSTUN {
--		ss := stunserver.New(ctx)
--		go ss.ListenAndServe(net.JoinHostPort(listenHost, fmt.Sprint(*stunPort)))
--	}
--
--	cfg := loadConfig()
--
- 	serveTLS := tsweb.IsProd443(*addr) || *certMode == "manual"
- 	if *flagACEEnabled {
- 		if !serveTLS {
-@@ -200,6 +197,19 @@ func main() {
+@@ -205,6 +209,11 @@ func main() {
+ 			log.Fatal(err)
  		}
  	}
- 
 +	if serveTLS && net.ParseIP(*hostname) == nil {
 +		if err := dnsname.ValidHostname(*hostname); err != nil {
 +			log.Fatalf("invalid -hostname: %v", err)
 +		}
 +	}
-+
-+	if *runSTUN {
-+		ss := stunserver.New(ctx)
-+		go ss.ListenAndServe(net.JoinHostPort(listenHost, fmt.Sprint(*stunPort)))
-+	}
-+
-+	cfg := loadConfig()
-+
+ 
  	s := derpserver.New(cfg.PrivateKey, log.Printf)
  	s.SetVerifyClient(*verifyClients)
- 	s.SetTailscaledSocketPath(*socket)
 diff --git a/cmd/derper/mesh.go b/cmd/derper/mesh.go
 index c07cfe9..de0eb5a 100644
 --- a/cmd/derper/mesh.go

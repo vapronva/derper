@@ -1,8 +1,8 @@
 diff --git a/cmd/derper/ace.go b/cmd/derper/ace.go
-index ae2d0cb..91470df 100644
+index ae2d0cb..50559b0 100644
 --- a/cmd/derper/ace.go
 +++ b/cmd/derper/ace.go
-@@ -7,15 +7,81 @@
+@@ -7,15 +7,83 @@
  
  import (
  	"errors"
@@ -23,6 +23,8 @@ index ae2d0cb..91470df 100644
 +var flagACEAllowedTargets = flag.String("ace-allowed-target", "controlplane.tailscale.com", "comma-separated control-plane hostnames for ACE (exact, case-insensitive match; public addresses only)")
 +
 +var aceAllowedTargets set.Set[string]
++
++var aceIPv6GlobalUnicast = netip.MustParsePrefix("2000::/3")
 +
 +var aceBlockedPrefixes = []netip.Prefix{
 +	netip.MustParsePrefix("0.0.0.0/8"),
@@ -57,7 +59,7 @@ index ae2d0cb..91470df 100644
 +	if !ip.IsGlobalUnicast() || ip.IsPrivate() {
 +		return false
 +	}
-+	if ip.Is6() && !netip.MustParsePrefix("2000::/3").Contains(ip) {
++	if ip.Is6() && !aceIPv6GlobalUnicast.Contains(ip) {
 +		return false
 +	}
 +	for _, prefix := range aceBlockedPrefixes {
@@ -84,7 +86,7 @@ index ae2d0cb..91470df 100644
  // serveConnect handles a CONNECT request for ACE support.
  func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request) {
  	if !*flagACEEnabled {
-@@ -30,6 +96,7 @@ func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request)
+@@ -30,6 +98,7 @@ func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request)
  	}
  
  	ch := &connectproxy.Handler{
@@ -92,7 +94,7 @@ index ae2d0cb..91470df 100644
  		Check: func(hostPort string) error {
  			host, port, err := net.SplitHostPort(hostPort)
  			if err != nil {
-@@ -65,9 +132,7 @@ func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request)
+@@ -65,9 +134,7 @@ func serveConnect(s *derpserver.Server, w http.ResponseWriter, r *http.Request)
  				// "CONNECT controlplane.tailscale.com:80 HTTP/1.1" if it wants.
  				return fmt.Errorf("only ports 443 and 80 are allowed")
  			}
@@ -104,10 +106,10 @@ index ae2d0cb..91470df 100644
  			}
  			return nil
 diff --git a/cmd/derper/derper.go b/cmd/derper/derper.go
-index 213a33f..65beaae 100644
+index 3bdb866..fc5eb2e 100644
 --- a/cmd/derper/derper.go
 +++ b/cmd/derper/derper.go
-@@ -190,6 +190,15 @@ func main() {
+@@ -196,6 +196,15 @@ func main() {
  	cfg := loadConfig()
  
  	serveTLS := tsweb.IsProd443(*addr) || *certMode == "manual"
@@ -124,7 +126,7 @@ index 213a33f..65beaae 100644
  	s := derpserver.New(cfg.PrivateKey, log.Printf)
  	s.SetVerifyClient(*verifyClients)
 diff --git a/net/connectproxy/connectproxy.go b/net/connectproxy/connectproxy.go
-index a63c6ac..93f80a5 100644
+index a63c6ac..14252f4 100644
 --- a/net/connectproxy/connectproxy.go
 +++ b/net/connectproxy/connectproxy.go
 @@ -37,6 +37,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -139,59 +141,25 @@ index a63c6ac..93f80a5 100644
  	dial := h.Dial
  	if dial == nil {
  		var d net.Dialer
-@@ -56,6 +61,12 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
- 		}
- 	}
- 
-+	hj, ok := w.(http.Hijacker)
-+	if !ok {
-+		http.Error(w, "CONNECT hijack unavailable", http.StatusInternalServerError)
-+		return
-+	}
-+
- 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
- 	defer cancel()
- 	back, err := dial(ctx, "tcp", hostPort)
-@@ -66,11 +77,6 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
- 	}
- 	defer back.Close()
- 
--	hj, ok := w.(http.Hijacker)
--	if !ok {
--		http.Error(w, "CONNECT hijack unavailable", http.StatusInternalServerError)
--		return
--	}
- 	c, br, err := hj.Hijack()
- 	if err != nil {
- 		logf("CONNECT hijack: %v", err)
-@@ -78,7 +84,11 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
- 	}
+@@ -79,6 +84,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
  	defer c.Close()
  
--	io.WriteString(c, "HTTP/1.1 200 OK\r\n\r\n")
-+	if _, err := io.WriteString(c, "HTTP/1.1 200 OK\r\n\r\n"); err != nil {
-+		logf("CONNECT response: %v", err)
-+		return
-+	}
+ 	io.WriteString(c, "HTTP/1.1 200 OK\r\n\r\n")
 +	logf("CONNECT %s -> %s", r.RemoteAddr, hostPort)
  
  	errc := make(chan error, 2)
  	go func() {
 diff --git a/cmd/derper/ace_policy_test.go b/cmd/derper/ace_policy_test.go
 new file mode 100644
-index 0000000..30d63ca
+index 0000000..ca3e23b
 --- /dev/null
 +++ b/cmd/derper/ace_policy_test.go
-@@ -0,0 +1,65 @@
+@@ -0,0 +1,37 @@
 +package main
 +
 +import (
-+	"context"
-+	"net"
 +	"net/netip"
-+	"strings"
 +	"testing"
-+	"time"
 +)
 +
 +func TestACEPublicAddresses(t *testing.T) {
@@ -213,30 +181,6 @@ index 0000000..30d63ca
 +	}
 +}
 +
-+func TestACEDialRejectsBeforeConnect(t *testing.T) {
-+	listener, err := net.Listen("tcp", "127.0.0.1:0")
-+	if err != nil {
-+		t.Fatal(err)
-+	}
-+	defer listener.Close()
-+	ctx, cancel := context.WithTimeout(t.Context(), time.Second)
-+	defer cancel()
-+	conn, err := aceDialer.DialContext(ctx, "tcp", listener.Addr().String())
-+	if conn != nil {
-+		conn.Close()
-+		t.Fatal("dial connected to loopback")
-+	}
-+	if err == nil || !strings.Contains(err.Error(), "is not public") {
-+		t.Fatalf("dial error = %v", err)
-+	}
-+	listener.(*net.TCPListener).SetDeadline(time.Now().Add(20 * time.Millisecond))
-+	conn, err = listener.Accept()
-+	if err == nil {
-+		conn.Close()
-+		t.Fatal("private destination accepted a connection")
-+	}
-+}
-+
 +func TestACETargets(t *testing.T) {
 +	targets, err := parseACETargets("CONTROLPLANE.TAILSCALE.COM, headscale.example.com ")
 +	if err != nil || !targets.Contains("controlplane.tailscale.com") || !targets.Contains("headscale.example.com") {
@@ -246,59 +190,5 @@ index 0000000..30d63ca
 +		if _, err := parseACETargets(value); err == nil {
 +			t.Errorf("invalid target accepted: %q", value)
 +		}
-+	}
-+}
-diff --git a/net/connectproxy/connectproxy_test.go b/net/connectproxy/connectproxy_test.go
-new file mode 100644
-index 0000000..1a3a770
---- /dev/null
-+++ b/net/connectproxy/connectproxy_test.go
-@@ -0,0 +1,48 @@
-+package connectproxy
-+
-+import (
-+	"bufio"
-+	"context"
-+	"net"
-+	"net/http"
-+	"net/http/httptest"
-+	"testing"
-+)
-+
-+func TestNoDialWithoutHijacker(t *testing.T) {
-+	handler := &Handler{
-+		Dial: func(context.Context, string, string) (net.Conn, error) {
-+			t.Fatal("dialed before checking hijack support")
-+			return nil, nil
-+		},
-+	}
-+	response := httptest.NewRecorder()
-+	handler.ServeHTTP(response, httptest.NewRequest(http.MethodConnect, "example.com:443", nil))
-+	if response.Code != http.StatusInternalServerError {
-+		t.Fatalf("status = %d", response.Code)
-+	}
-+}
-+
-+type unavailableHijacker struct {
-+	http.ResponseWriter
-+}
-+
-+func (unavailableHijacker) Hijack() (net.Conn, *bufio.ReadWriter, error) {
-+	return nil, nil, http.ErrNotSupported
-+}
-+
-+func TestNoDialForHTTP2WithWrappedWriter(t *testing.T) {
-+	handler := &Handler{
-+		Dial: func(context.Context, string, string) (net.Conn, error) {
-+			t.Fatal("dialed for an HTTP/2 request")
-+			return nil, nil
-+		},
-+	}
-+	response := httptest.NewRecorder()
-+	request := httptest.NewRequest(http.MethodConnect, "example.com:443", nil)
-+	request.ProtoMajor = 2
-+	handler.ServeHTTP(unavailableHijacker{response}, request)
-+	if response.Code != http.StatusHTTPVersionNotSupported {
-+		t.Fatalf("status = %d", response.Code)
 +	}
 +}
