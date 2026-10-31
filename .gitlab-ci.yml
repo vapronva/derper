@@ -52,13 +52,13 @@ include:
     inputs:
       <<: *build-inputs
       name: fedora-tag
-      build_args: --build-arg RUNTIME_IMAGE=docker.io/library/fedora:44
+      build_args: --build-arg RUNTIME=fedora
       image: derper-fedora
   - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
     inputs:
       <<: *build-inputs
       name: fedora-main
-      build_args: --build-arg RUNTIME_IMAGE=docker.io/library/fedora:44 --build-arg TAILSCALE_CHANNEL=main --build-arg TAILSCALE_REVISION=$DERP_MAIN_REVISION
+      build_args: --build-arg RUNTIME=fedora --build-arg TAILSCALE_CHANNEL=main --build-arg TAILSCALE_REVISION=$DERP_MAIN_REVISION
       image: derper-fedora
       tags: main
       scan_tag: main
@@ -66,7 +66,7 @@ include:
     inputs:
       <<: *build-inputs
       name: fedora-tag-performance
-      build_args: --build-arg RUNTIME_IMAGE=docker.io/library/fedora:44 --build-arg PATCH_VARIANT=performance
+      build_args: --build-arg RUNTIME=fedora --build-arg PATCH_VARIANT=performance
       image: derper-fedora
       tags: $DERP_PERFORMANCE_TAGS
       scan_tag: performance
@@ -74,7 +74,7 @@ include:
     inputs:
       <<: *build-inputs
       name: fedora-main-performance
-      build_args: --build-arg RUNTIME_IMAGE=docker.io/library/fedora:44 --build-arg TAILSCALE_CHANNEL=main --build-arg PATCH_VARIANT=performance --build-arg TAILSCALE_REVISION=$DERP_MAIN_REVISION
+      build_args: --build-arg RUNTIME=fedora --build-arg TAILSCALE_CHANNEL=main --build-arg PATCH_VARIANT=performance --build-arg TAILSCALE_REVISION=$DERP_MAIN_REVISION
       image: derper-fedora
       tags: main-performance
       scan_tag: main-performance

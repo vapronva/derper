@@ -1,4 +1,4 @@
-ARG RUNTIME_IMAGE=docker.io/library/alpine:3
+ARG RUNTIME=alpine
 
 FROM docker.io/library/golang:1.27.3-alpine AS builder
 
@@ -31,13 +31,15 @@ RUN case "$TAILSCALE_CHANNEL" in \
     -o /derper ./cmd/derper && \
     cp LICENSE /LICENSE.tailscale
 
-FROM $RUNTIME_IMAGE
+FROM docker.io/library/alpine:3 AS alpine
 
-RUN if command -v apk >/dev/null; then \
-        apk upgrade --no-cache && apk add --no-cache ca-certificates tzdata; \
-    else \
-        dnf upgrade -y --refresh && dnf install -y ca-certificates tzdata && dnf clean all; \
-    fi
+RUN apk upgrade --no-cache && apk add --no-cache tzdata
+
+FROM docker.io/library/fedora:44 AS fedora
+
+RUN dnf upgrade -y --refresh && dnf clean all
+
+FROM $RUNTIME
 
 WORKDIR /app
 
