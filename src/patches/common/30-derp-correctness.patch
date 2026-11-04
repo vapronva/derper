@@ -1,8 +1,21 @@
+diff --git a/derp/derphttp/derphttp_client.go b/derp/derphttp/derphttp_client.go
+index 8638d80..0a6dc57 100644
+--- a/derp/derphttp/derphttp_client.go
++++ b/derp/derphttp/derphttp_client.go
+@@ -1040,7 +1040,7 @@ func (c *Client) ForwardPacket(from, to key.NodePublic, b derp.LoanedBytes) erro
+ 	if err != nil {
+ 		return err
+ 	}
+-	if err := client.ForwardPacket(from, to, b); err != nil {
++	if err = client.ForwardPacket(from, to, b); err != nil {
+ 		c.closeForReconnect(client)
+ 	}
+ 	return err
 diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
-index aeb5924..4ca3335 100644
+index f97aff4..24bc5da 100644
 --- a/derp/derpserver/derpserver.go
 +++ b/derp/derpserver/derpserver.go
-@@ -796,6 +796,11 @@ func (s *Server) Accept(ctx context.Context, nc derp.Conn, brw *bufio.ReadWriter
+@@ -798,6 +798,11 @@ func (s *Server) Accept(ctx context.Context, nc derp.Conn, brw *bufio.ReadWriter
  	closed := make(chan struct{})
  
  	s.mu.Lock()
@@ -14,7 +27,7 @@ index aeb5924..4ca3335 100644
  	s.accepts.Add(1)             // while holding s.mu for connNum read on next line
  	connNum := s.accepts.Value() // expvar sadly doesn't return new value on Add(1)
  	s.netConns[nc] = closed
-@@ -1685,7 +1690,7 @@ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
+@@ -1695,7 +1700,7 @@ func (c *sclient) sendPkt(dst *sclient, p pkt) error {
  		if s.perClientSendQueueDepth == 0 {
  			reason = dropReasonQueueTail
  		}
@@ -23,7 +36,7 @@ index aeb5924..4ca3335 100644
  		s.putPacketBuf(p.buf)
  		if dst.debug {
  			dst.debugLogf("sendPkt dropped, reason=%s", reason)
-@@ -2330,7 +2335,7 @@ func expMovingAverage(prev, newValue, alpha float64) float64 {
+@@ -2340,7 +2345,7 @@ func expMovingAverage(prev, newValue, alpha float64) float64 {
  
  // recordQueueTime updates the average queue duration metric after a packet has been sent.
  func (c *sclient) recordQueueTime(enqueuedAt time.Time) {
@@ -32,7 +45,7 @@ index aeb5924..4ca3335 100644
  	for {
  		old := atomic.LoadUint64(c.s.avgQueueDuration)
  		newAvg := expMovingAverage(math.Float64frombits(old), elapsed, 0.1)
-@@ -2685,6 +2690,9 @@ func (c *sclient) onKeepAliveTimer() {
+@@ -2695,6 +2700,9 @@ func (c *sclient) onKeepAliveTimer() {
  func (c *sclient) writePending(pend writerPending) (frames int, carry writerPending, err error) {
  	if pend&pendPeerGone != 0 {
  		for _, m := range c.takePeerGonePending() {

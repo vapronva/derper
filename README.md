@@ -19,7 +19,7 @@ This project includes components from:
 ### To the [Original `derper-docker` Dockerfile](https://github.com/kaaanata/derper-docker/blob/main/Dockerfile)
 
 - One shared [Dockerfile](./Dockerfile) for Alpine and Fedora
-- Changed runtime base image from `ubuntu` to `alpine:3`/`fedora:44` and builder from `golang:latest` to `golang:1.27.3-alpine`
+- Changed runtime base image from `ubuntu` to `alpine:3`/`fedora:45` and builder from `golang:latest` to `golang:1.27.3-alpine`
 - Added Go module mirror support via `MIRROR_GO_URL`
 - Build `derper` from a Tailscale source tree instead of `go install tailscale.com/cmd/derper@<version>`
 
@@ -42,15 +42,15 @@ This project includes components from:
 
 | Source         | Patches              | Tags                                                                                             |
 | -------------- | -------------------- | ------------------------------------------------------------------------------------------------ |
-| Pinned release | Common               | `latest`, `1`, `1.104`, `1.104.4`                                                                |
+| Pinned release | Common               | `latest`, `1`, `1.104`, `1.104.5`                                                                |
 | Pinned main    | Common               | `main`                                                                                           |
-| Pinned release | Common + performance | `performance`, `latest-performance`, `1-performance`, `1.104-performance`, `1.104.4-performance` |
+| Pinned release | Common + performance | `performance`, `latest-performance`, `1-performance`, `1.104-performance`, `1.104.5-performance` |
 | Pinned main    | Common + performance | `main-performance`                                                                               |
 
 ### Source Pins
 
-- [`src/tailscale`](./src/tailscale) pins the release, currently `v1.104.4`.
-- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `1334899864168f2801ffe4c69d4d6b231b3b9506`.
+- [`src/tailscale`](./src/tailscale) pins the release, currently `v1.104.5`.
+- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `4290c03d37d0956e6ab0421bbe85fdc764ff1c50`.
 
 ### Example Usage of Container Images
 

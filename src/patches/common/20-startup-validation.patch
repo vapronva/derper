@@ -1,5 +1,5 @@
 diff --git a/cmd/derper/derper.go b/cmd/derper/derper.go
-index fc5eb2e..d7d5190 100644
+index fc5eb2e..7552af8 100644
 --- a/cmd/derper/derper.go
 +++ b/cmd/derper/derper.go
 @@ -48,6 +48,7 @@
@@ -25,8 +25,8 @@ index fc5eb2e..d7d5190 100644
  		}
  	}
 +	if serveTLS && net.ParseIP(*hostname) == nil {
-+		if err := dnsname.ValidHostname(*hostname); err != nil {
-+			log.Fatalf("invalid -hostname: %v", err)
++		if err := dnsname.ValidHostname(*hostname); err != nil || strings.Trim(*hostname, ".") != *hostname {
++			log.Fatalf("invalid -hostname %q", *hostname)
 +		}
 +	}
  

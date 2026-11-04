@@ -1,5 +1,5 @@
 diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
-index 60f252a..1c924fb 100644
+index 886c050..7434155 100644
 --- a/derp/derpserver/derpserver.go
 +++ b/derp/derpserver/derpserver.go
 @@ -86,9 +86,10 @@ func init() {
@@ -30,7 +30,7 @@ index 60f252a..1c924fb 100644
  // dupPolicy is a temporary (2021-08-30) mechanism to change the policy
  // of how duplicate connection for the same key are handled.
  type dupPolicy int8
-@@ -215,9 +223,10 @@ type Server struct {
+@@ -216,9 +224,10 @@ type Server struct {
  	// values that are not allowed to connect. Mesh peers are exempt.
  	disallowedAppNames set.Set[string]
  
@@ -44,7 +44,7 @@ index 60f252a..1c924fb 100644
  
  	// sendQueueRingPool holds released pktQueue ring buffers, each a
  	// *[]pkt of length perClientSendQueueDepth. Most clients are idle
-@@ -447,6 +456,7 @@ func New(privateKey key.NodePrivate, logf logger.Logf) *Server {
+@@ -448,6 +457,7 @@ func New(privateKey key.NodePrivate, logf logger.Logf) *Server {
  	genDroppedCounters()
  
  	s.perClientSendQueueDepth = getPerClientSendQueueDepth()
@@ -52,15 +52,15 @@ index 60f252a..1c924fb 100644
  	return s
  }
  
-@@ -570,6 +580,7 @@ func genDroppedCounters() {
- 		dropReasonQueueTail,
- 		dropReasonWriteError,
- 		dropReasonDupClient,
-+		dropReasonQueueStale,
+@@ -564,6 +574,7 @@ func genDroppedCounters() {
  	}
  
- 	for _, dr := range dropReasons {
-@@ -1452,12 +1463,7 @@ func (c *sclient) handleFrameForwardPacket(_ derp.FrameType, fl uint32) error {
+ 	dropReasons := []dropReason{
++		dropReasonQueueStale,
+ 		dropReasonUnknownDest,
+ 		dropReasonUnknownDestOnFwd,
+ 		dropReasonGoneDisconnected,
+@@ -1457,12 +1468,7 @@ func (c *sclient) handleFrameForwardPacket(_ derp.FrameType, fl uint32) error {
  		dst.debugLogf("received forwarded packet from %s via %s", srcKey.ShortString(), c.key.ShortString())
  	}
  
@@ -74,7 +74,7 @@ index 60f252a..1c924fb 100644
  }
  
  // lookupDest returns the local client, mesh forwarder, or duplicate-client
-@@ -1538,13 +1544,7 @@ func (c *sclient) handleFrameSendPacket(_ derp.FrameType, fl uint32) error {
+@@ -1547,13 +1553,7 @@ func (c *sclient) handleFrameSendPacket(_ derp.FrameType, fl uint32) error {
  		c.debugLogf("SendPacket for %s, sending directly", dstKey.ShortString())
  	}
  
@@ -89,15 +89,15 @@ index 60f252a..1c924fb 100644
  }
  
  // setRateLimit updates the receive rate limiter. When bytesPerSec is 0, or the
-@@ -1646,6 +1646,7 @@ type dropReasonKindLabels struct {
- 	dropReasonQueueTail        dropReason = "queue_tail"          // destination queue is full, dropped packet at queue tail
- 	dropReasonWriteError       dropReason = "write_error"         // OS write() failed
- 	dropReasonDupClient        dropReason = "dup_client"          // the public key is connected 2+ times (active/active, fighting)
-+	dropReasonQueueStale       dropReason = "queue_stale"         // destination queue held the packet past perClientSendQueueMaxAge
- )
+@@ -1648,6 +1648,7 @@ type dropReasonKindLabels struct {
+ type dropReason string
  
- func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, reason dropReason) {
-@@ -1677,6 +1678,7 @@ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, r
+ const (
++	dropReasonQueueStale       dropReason = "queue_stale"
+ 	dropReasonUnknownDest      dropReason = "unknown_dest"        // unknown destination pubkey
+ 	dropReasonUnknownDestOnFwd dropReason = "unknown_dest_on_fwd" // unknown destination pubkey on a derp-forwarded packet
+ 	dropReasonGoneDisconnected dropReason = "gone_disconnected"   // destination tailscaled disconnected before we could send
+@@ -1687,6 +1688,7 @@ func (s *Server) recordDrop(packetBytes []byte, srcKey, dstKey key.NodePublic, r
  func (c *sclient) sendPkt(dst *sclient, p pkt) error {
  	s := c.s
  	dstKey := dst.key
@@ -105,17 +105,22 @@ index 60f252a..1c924fb 100644
  
  	q, pend := &dst.sendQueue, pendSendQueue
  	if disco.LooksLikeDiscoWrapper(p.bs) {
-@@ -2500,6 +2502,9 @@ func (c *sclient) runWriter() {
- 			var err error
- 			n, carry, err = c.writePending(pend)
- 			inBatch += n
-+			if err == nil && n == 0 && carry != 0 {
-+				err = c.bw.Flush()
-+			}
- 			if err != nil {
+@@ -2514,6 +2516,14 @@ func (c *sclient) runWriter() {
  				c.stopWriterOnError(err)
  				return
-@@ -2733,6 +2738,12 @@ func (c *sclient) writePending(pend writerPending) (frames int, carry writerPend
+ 			}
++			if n == 0 && carry != 0 && inBatch != 0 {
++				if err := c.bw.Flush(); err != nil {
++					c.stopWriterOnError(err)
++					return
++				}
++				c.s.bufferedWriteFrames.Observe(float64(inBatch))
++				inBatch = 0
++			}
+ 			continue
+ 		}
+ 		// Caught up. Flush, then try to park; if work arrived
+@@ -2743,6 +2753,12 @@ func (c *sclient) writePending(pend writerPending) (frames int, carry writerPend
  		if !ok {
  			continue
  		}

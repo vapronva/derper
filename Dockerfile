@@ -35,7 +35,7 @@ FROM docker.io/library/alpine:3 AS alpine
 
 RUN apk upgrade --no-cache && apk add --no-cache tzdata
 
-FROM docker.io/library/fedora:44 AS fedora
+FROM docker.io/library/fedora:45 AS fedora
 
 RUN dnf upgrade -y --refresh && dnf clean all
 

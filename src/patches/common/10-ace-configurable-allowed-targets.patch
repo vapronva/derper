@@ -1,5 +1,5 @@
 diff --git a/cmd/derper/ace.go b/cmd/derper/ace.go
-index ae2d0cb..50559b0 100644
+index ae2d0cb..506698f 100644
 --- a/cmd/derper/ace.go
 +++ b/cmd/derper/ace.go
 @@ -7,15 +7,83 @@
@@ -46,7 +46,7 @@ index ae2d0cb..50559b0 100644
 +	targets := set.Set[string]{}
 +	for host := range strings.SplitSeq(value, ",") {
 +		host = strings.ToLower(strings.TrimSpace(host))
-+		if err := dnsname.ValidHostname(host); err != nil || strings.HasSuffix(host, ".") {
++		if err := dnsname.ValidHostname(host); err != nil || strings.Trim(host, ".") != host {
 +			return nil, fmt.Errorf("invalid ACE hostname %q", host)
 +		}
 +		targets.Add(host)
@@ -151,7 +151,7 @@ index a63c6ac..14252f4 100644
  	go func() {
 diff --git a/cmd/derper/ace_policy_test.go b/cmd/derper/ace_policy_test.go
 new file mode 100644
-index 0000000..ca3e23b
+index 0000000..209e74b
 --- /dev/null
 +++ b/cmd/derper/ace_policy_test.go
 @@ -0,0 +1,37 @@
@@ -186,7 +186,7 @@ index 0000000..ca3e23b
 +	if err != nil || !targets.Contains("controlplane.tailscale.com") || !targets.Contains("headscale.example.com") {
 +		t.Fatalf("targets = %v, error = %v", targets, err)
 +	}
-+	for _, value := range []string{"", "example.com,", "example.com:443", "example.com.", "https://example.com", "example com", "*.example.com"} {
++	for _, value := range []string{"", "example.com,", "example.com:443", "example.com.", ".example.com", "https://example.com", "example com", "*.example.com"} {
 +		if _, err := parseACETargets(value); err == nil {
 +			t.Errorf("invalid target accepted: %q", value)
 +		}
