@@ -1,5 +1,5 @@
 diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
-index 886c050..7434155 100644
+index 023b91e..8975141 100644
 --- a/derp/derpserver/derpserver.go
 +++ b/derp/derpserver/derpserver.go
 @@ -86,9 +86,10 @@ func init() {
@@ -10,7 +10,7 @@ index 886c050..7434155 100644
 -	DefaultTCPWiteTimeout          = 2 * time.Second
 -	privilegedWriteTimeout         = 30 * time.Second // for clients with the mesh key
 +	defaultPerClientSendQueueDepth  = 256 // default packets buffered for sending
-+	defaultPerClientSendQueueMaxAge = 5 * time.Millisecond
++	defaultPerClientSendQueueMaxAge = 3 * time.Millisecond
 +	DefaultTCPWiteTimeout           = 2 * time.Second
 +	privilegedWriteTimeout          = 30 * time.Second // for clients with the mesh key
  )

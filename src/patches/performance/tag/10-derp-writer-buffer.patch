@@ -1,0 +1,13 @@
+diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
+index 6bb3bdb..6210048 100644
+--- a/derp/derpserver/derpserver.go
++++ b/derp/derpserver/derpserver.go
+@@ -3350,7 +3350,7 @@ func (s *Server) ServeDebugTraffic(w http.ResponseWriter, r *http.Request) {
+ 
+ var bufioWriterPool = &sync.Pool{
+ 	New: func() any {
+-		return bufio.NewWriterSize(io.Discard, 2<<10)
++		return bufio.NewWriterSize(io.Discard, 16<<10)
+ 	},
+ }
+ 

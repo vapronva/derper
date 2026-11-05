@@ -23,7 +23,7 @@ RUN case "$TAILSCALE_CHANNEL" in \
         main) source_dir=tailscale-main version_suffix="+sha.${TAILSCALE_REVISION:?set TAILSCALE_REVISION to the main source commit}" ;; \
         *) echo "Unknown TAILSCALE_CHANNEL: $TAILSCALE_CHANNEL" >&2; exit 1 ;; \
     esac && \
-    bash ./apply-patches.sh "$PATCH_VARIANT" "$source_dir" && \
+    bash ./apply-patches.sh "$PATCH_VARIANT" "$TAILSCALE_CHANNEL" "$source_dir" && \
     cd "$source_dir" && \
     version="$(cat VERSION.txt)$version_suffix" && \
     CGO_ENABLED=0 go build -trimpath \

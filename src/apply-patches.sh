@@ -1,22 +1,33 @@
 #!/usr/bin/env bash
 set -euo pipefail
+shopt -s nullglob
 
 usage() {
-    echo "usage: bash src/apply-patches.sh light|performance <source-dir>" >&2
+    echo "usage: bash src/apply-patches.sh light|performance tag|main <source-dir>" >&2
     exit 1
 }
 
-[ "$#" -eq 2 ] || usage
+[ "$#" -eq 3 ] || usage
 variant=$1
-source_dir=$2
+channel=$2
+source_dir=$3
 patches_dir=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)/patches
 
-patches=("$patches_dir"/common/*.patch)
 case "$variant" in
-light) ;;
-performance) patches+=("$patches_dir"/performance/*.patch) ;;
+light) layers=(common) ;;
+performance) layers=(common performance) ;;
 *) usage ;;
 esac
+[ "$channel" = tag ] || [ "$channel" = main ] || usage
+
+patches=()
+for layer in "${layers[@]}"; do
+    patches+=("$patches_dir/$layer"/*.patch "$patches_dir/$layer/$channel"/*.patch)
+done
+[ "${#patches[@]}" -ne 0 ] || {
+    echo "no patches found under $patches_dir" >&2
+    exit 1
+}
 
 printf 'Patching %s with:\n' "$source_dir"
 printf '  %s\n' "${patches[@]#"$patches_dir/"}"

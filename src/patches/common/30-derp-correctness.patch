@@ -12,7 +12,7 @@ index 8638d80..0a6dc57 100644
  	}
  	return err
 diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
-index f97aff4..24bc5da 100644
+index 87a8a2e..023b91e 100644
 --- a/derp/derpserver/derpserver.go
 +++ b/derp/derpserver/derpserver.go
 @@ -798,6 +798,11 @@ func (s *Server) Accept(ctx context.Context, nc derp.Conn, brw *bufio.ReadWriter
@@ -49,12 +49,36 @@ index f97aff4..24bc5da 100644
  func (c *sclient) writePending(pend writerPending) (frames int, carry writerPending, err error) {
  	if pend&pendPeerGone != 0 {
  		for _, m := range c.takePeerGonePending() {
-+			if m.reason == derp.PeerGoneReasonDisconnected {
-+				delete(c.sawSrc, m.peer)
++			if m.reason == derp.PeerGoneReasonDisconnected && c.rewatchReturnedPeer(m.peer) {
++				continue
 +			}
  			if err := c.sendPeerGone(m.peer, m.reason); err != nil {
  				return frames, 0, err
  			}
+@@ -2956,6 +2964,23 @@ func (c *sclient) noteSendFromSrc(src key.NodePublic) {
+ 	mak.Set(&c.sawSrc, src, h)
+ }
+ 
++func (c *sclient) rewatchReturnedPeer(peer key.NodePublic) bool {
++	s := c.s
++	s.mu.Lock()
++	defer s.mu.Unlock()
++	if _, ok := s.clientsMesh[peer]; !ok {
++		delete(c.sawSrc, peer)
++		return false
++	}
++	hset, ok := s.peerGoneWatchers[peer]
++	if !ok {
++		hset = set.HandleSet[func(key.NodePublic)]{}
++		s.peerGoneWatchers[peer] = hset
++	}
++	mak.Set(&c.sawSrc, peer, hset.Add(c.onPeerGoneFromRegion))
++	return true
++}
++
+ // AddPacketForwarder registers fwd as a packet forwarder for dst.
+ // fwd must be comparable.
+ func (s *Server) AddPacketForwarder(dst key.NodePublic, fwd PacketForwarder) {
 diff --git a/derp/derpserver/peergone_rewatch_test.go b/derp/derpserver/peergone_rewatch_test.go
 new file mode 100644
 index 0000000..027b070

@@ -25,13 +25,14 @@ This project includes components from:
 
 ### To `derper` Itself ([`src/patches`](./src/patches))
 
-[`common`](./src/patches/common) patches apply to every image and [`performance`](./src/patches/performance) patches only to performance images, on both source pins.
+[`common`](./src/patches/common) patches apply to every image and [`performance`](./src/patches/performance) patches only to performance images. A `tag` or `main` subdirectory limits its patches to that source pin.
 
 - [`10-ace-configurable-allowed-targets`](./src/patches/common/10-ace-configurable-allowed-targets.patch): makes the embedded ACE proxy's allowed `CONNECT` targets configurable via `-ace-allowed-target` and dials public addresses only
 - [`20-startup-validation`](./src/patches/common/20-startup-validation.patch): rejects stray positional arguments, invalid TLS hostnames, and empty mesh targets at startup
 - [`30-derp-correctness`](./src/patches/common/30-derp-correctness.patch): fixes reconnect notifications, shutdown races, drop attribution, and queue timing
-- [`10-derp-buffers`](./src/patches/performance/10-derp-buffers.patch): 4 KiB standing read buffer (up from 1 KiB) and 16 KiB pooled write buffers (up from 2 KiB)
+- [`10-derp-reader-buffer`](./src/patches/performance/10-derp-reader-buffer.patch): 4 KiB standing read buffer (up from 1 KiB)
 - [`20-derp-sendqueue-deadline`](./src/patches/performance/20-derp-sendqueue-deadline.patch): 256-packet send queues that drop by age instead of only by depth
+- [`tag/10-derp-writer-buffer`](./src/patches/performance/tag/10-derp-writer-buffer.patch): 16 KiB pooled write buffers (up from 2 KiB) on the release pin, matching upstream `main`
 
 ## Container Images
 
@@ -50,7 +51,7 @@ This project includes components from:
 ### Source Pins
 
 - [`src/tailscale`](./src/tailscale) pins the release, currently `v1.104.5`.
-- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `4290c03d37d0956e6ab0421bbe85fdc764ff1c50`.
+- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `2993b5e6de3b8b164bbf30463516631fc3e551be`.
 
 ### Example Usage of Container Images
 
@@ -90,7 +91,7 @@ docker run -d \
 
 #### Tuning via Environment Variables in Container Images
 
-| Variable                                         | Default                   | Description                                                                      |
-| ------------------------------------------------ | ------------------------- | -------------------------------------------------------------------------------- |
-| `TS_DEBUG_DERP_PER_CLIENT_SEND_QUEUE_DEPTH`      | `32` (performance: `256`) | Packets buffered per destination                                                 |
-| `TS_DEBUG_DERP_PER_CLIENT_SEND_QUEUE_MAX_AGE_MS` | `5`                       | Performance images only: queue age at which a packet is dropped; `0` disables it |
+| Variable                                         | Default                   | Description                                                                                                      |
+| ------------------------------------------------ | ------------------------- | ---------------------------------------------------------------------------------------------------------------- |
+| `TS_DEBUG_DERP_PER_CLIENT_SEND_QUEUE_DEPTH`      | `32` (performance: `256`) | Packets buffered per destination                                                                                 |
+| `TS_DEBUG_DERP_PER_CLIENT_SEND_QUEUE_MAX_AGE_MS` | `3`                       | Performance images only: drop a non-disco packet queued longer than this if more wait behind it; `0` disables it |
