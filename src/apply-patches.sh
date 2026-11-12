@@ -32,4 +32,4 @@ done
 printf 'Patching %s with:\n' "$source_dir"
 printf '  %s\n' "${patches[@]#"$patches_dir/"}"
 patch_set=$(cat -- "${patches[@]}")
-git -C "$source_dir" apply <<<"$patch_set"
+GIT_CEILING_DIRECTORIES=$(cd -- "$source_dir/.." && pwd) git -C "$source_dir" apply <<<"$patch_set"

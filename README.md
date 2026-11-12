@@ -19,7 +19,7 @@ This project includes components from:
 ### To the [Original `derper-docker` Dockerfile](https://github.com/kaaanata/derper-docker/blob/main/Dockerfile)
 
 - One shared [Dockerfile](./Dockerfile) for Alpine and Fedora
-- Changed runtime base image from `ubuntu` to `alpine:3`/`fedora:45` and builder from `golang:latest` to `golang:1.27.3-alpine`
+- Changed runtime base image from `ubuntu` to `alpine:3` or the latest GA `fedora`, and builder from `golang:latest` to a pinned `golang` Alpine image
 - Added Go module mirror support via `MIRROR_GO_URL`
 - Build `derper` from a Tailscale source tree instead of `go install tailscale.com/cmd/derper@<version>`
 
@@ -29,7 +29,7 @@ This project includes components from:
 
 - [`10-ace-configurable-allowed-targets`](./src/patches/common/10-ace-configurable-allowed-targets.patch): makes the embedded ACE proxy's allowed `CONNECT` targets configurable via `-ace-allowed-target` and dials public addresses only
 - [`20-startup-validation`](./src/patches/common/20-startup-validation.patch): rejects stray positional arguments, invalid TLS hostnames, and empty mesh targets at startup
-- [`30-derp-correctness`](./src/patches/common/30-derp-correctness.patch): fixes reconnect notifications, shutdown races, drop attribution, and queue timing
+- [`30-derp-correctness`](./src/patches/common/30-derp-correctness.patch): fixes reconnect notifications, drop attribution, and queue timing
 - [`10-derp-reader-buffer`](./src/patches/performance/10-derp-reader-buffer.patch): 4 KiB standing read buffer (up from 1 KiB)
 - [`20-derp-sendqueue-deadline`](./src/patches/performance/20-derp-sendqueue-deadline.patch): 256-packet send queues that drop by age instead of only by depth
 - [`tag/10-derp-writer-buffer`](./src/patches/performance/tag/10-derp-writer-buffer.patch): 16 KiB pooled write buffers (up from 2 KiB) on the release pin, matching upstream `main`
@@ -41,17 +41,19 @@ This project includes components from:
 
 ### Tags for Container Images
 
-| Source         | Patches              | Tags                                                                                             |
-| -------------- | -------------------- | ------------------------------------------------------------------------------------------------ |
-| Pinned release | Common               | `latest`, `1`, `1.104`, `1.104.5`                                                                |
-| Pinned main    | Common               | `main`                                                                                           |
-| Pinned release | Common + performance | `performance`, `latest-performance`, `1-performance`, `1.104-performance`, `1.104.5-performance` |
-| Pinned main    | Common + performance | `main-performance`                                                                               |
+| Source         | Patches              | Tags                                                                                                               |
+| -------------- | -------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Pinned release | Common               | `latest`, `<major>`, `<major>.<minor>`, `<version>`                                                                |
+| Pinned main    | Common               | `main`                                                                                                             |
+| Pinned release | Common + performance | `performance`, `latest-performance`, `<major>-performance`, `<major>.<minor>-performance`, `<version>-performance` |
+| Pinned main    | Common + performance | `main-performance`                                                                                                 |
+
+`<version>` is the release pin's [`VERSION.txt`](./src/tailscale/VERSION.txt).
 
 ### Source Pins
 
-- [`src/tailscale`](./src/tailscale) pins the release, currently `v1.104.5`.
-- [`src/tailscale-main`](./src/tailscale-main) pins upstream `main`, currently `2993b5e6de3b8b164bbf30463516631fc3e551be`.
+- [`src/tailscale`](./src/tailscale) pins the latest Tailscale release tag.
+- [`src/tailscale-main`](./src/tailscale-main) pins a commit on upstream `main`; its images report main's `VERSION.txt` plus `+sha.<commit>`.
 
 ### Example Usage of Container Images
 
