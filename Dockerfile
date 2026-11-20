@@ -1,6 +1,6 @@
 ARG RUNTIME=alpine
 
-FROM docker.io/library/golang:1.27.4-alpine AS builder
+FROM --platform=$BUILDPLATFORM docker.io/library/golang:1.27.4-alpine AS builder
 
 RUN apk add --no-cache bash git
 
@@ -11,6 +11,8 @@ ARG TAILSCALE_CHANNEL=tag
 ARG PATCH_VARIANT=light
 
 ARG TAILSCALE_REVISION=""
+
+ARG TARGETARCH
 
 WORKDIR /src
 
@@ -26,7 +28,7 @@ RUN case "$TAILSCALE_CHANNEL" in \
     bash ./apply-patches.sh "$PATCH_VARIANT" "$TAILSCALE_CHANNEL" "$source_dir" && \
     cd "$source_dir" && \
     version="$(cat VERSION.txt)$version_suffix" && \
-    CGO_ENABLED=0 go build -trimpath \
+    CGO_ENABLED=0 GOARCH="${TARGETARCH:?}" go build -trimpath \
     -ldflags="-s -w -X tailscale.com/version.longStamp=$version -X tailscale.com/version.shortStamp=$version" \
     -o /derper ./cmd/derper && \
     cp LICENSE /LICENSE.tailscale

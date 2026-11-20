@@ -22,6 +22,7 @@ This project includes components from:
 - Changed runtime base image from `ubuntu` to `alpine:3` or the latest GA `fedora`, and builder from `golang:latest` to a pinned `golang` Alpine image
 - Added Go module mirror support via `MIRROR_GO_URL`
 - Build `derper` from a Tailscale source tree instead of `go install tailscale.com/cmd/derper@<version>`
+- Cross-compile `derper` on the build host for every target architecture instead of compiling under emulation
 
 ### To `derper` Itself ([`src/patches`](./src/patches))
 
@@ -29,7 +30,8 @@ This project includes components from:
 
 - [`10-ace-configurable-allowed-targets`](./src/patches/common/10-ace-configurable-allowed-targets.patch): makes the embedded ACE proxy's allowed `CONNECT` targets configurable via `-ace-allowed-target` and dials public addresses only
 - [`20-startup-validation`](./src/patches/common/20-startup-validation.patch): rejects stray positional arguments, invalid TLS hostnames, and empty mesh targets at startup
-- [`30-derp-correctness`](./src/patches/common/30-derp-correctness.patch): fixes reconnect notifications, drop attribution, and queue timing
+- [`30-derp-correctness`](./src/patches/common/30-derp-correctness.patch): fixes reconnect notifications, mesh forwarding errors, drop attribution, and queue timing
+- [`tag/10-derp-keepalive-timer`](./src/patches/common/tag/10-derp-keepalive-timer.patch): backports upstream `main`'s keepalive timer race fix to the release pin
 - [`10-derp-reader-buffer`](./src/patches/performance/10-derp-reader-buffer.patch): 4 KiB standing read buffer (up from 1 KiB)
 - [`20-derp-sendqueue-deadline`](./src/patches/performance/20-derp-sendqueue-deadline.patch): 256-packet send queues that drop by age instead of only by depth
 - [`tag/10-derp-writer-buffer`](./src/patches/performance/tag/10-derp-writer-buffer.patch): 16 KiB pooled write buffers (up from 2 KiB) on the release pin, matching upstream `main`

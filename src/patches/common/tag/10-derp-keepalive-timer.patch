@@ -1,0 +1,14 @@
+diff --git a/derp/derpserver/derpserver.go b/derp/derpserver/derpserver.go
+index 29cdf64..508220d 100644
+--- a/derp/derpserver/derpserver.go
++++ b/derp/derpserver/derpserver.go
+@@ -1234,7 +1234,8 @@ func (c *sclient) run(ctx context.Context) error {
+ 		c.startStatsLoop(ctx)
+ 	}
+ 
+-	c.keepAliveTimer = c.s.clock.AfterFunc(keepAliveInterval(), c.onKeepAliveTimer)
++	c.keepAliveTimer = c.s.clock.AfterFunc(365*24*time.Hour, c.onKeepAliveTimer)
++	c.keepAliveTimer.Reset(keepAliveInterval())
+ 
+ 	for {
+ 		ft, fl, err := derp.ReadFrameHeader(c.br)

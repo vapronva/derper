@@ -17,10 +17,8 @@ include:
         - job: detect version
           artifacts: true
       image: derper-alpine
-      tags: $DERP_TAGS
-      dockerfile: Dockerfile
+      tags: latest,$DERP_TAGS
       architectures: linux/amd64,linux/arm64
-      scan_tag: latest
       rules_changes:
         - Dockerfile
         - .containerignore
@@ -33,21 +31,18 @@ include:
       name: alpine-main
       build_args: --build-arg TAILSCALE_CHANNEL=main --build-arg TAILSCALE_REVISION=$DERP_MAIN_REVISION
       tags: main
-      scan_tag: main
   - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
     inputs:
       <<: *build-inputs
       name: alpine-tag-performance
       build_args: --build-arg PATCH_VARIANT=performance
-      tags: $DERP_PERFORMANCE_TAGS
-      scan_tag: performance
+      tags: performance,latest-performance,$DERP_PERFORMANCE_TAGS
   - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
     inputs:
       <<: *build-inputs
       name: alpine-main-performance
       build_args: --build-arg TAILSCALE_CHANNEL=main --build-arg PATCH_VARIANT=performance --build-arg TAILSCALE_REVISION=$DERP_MAIN_REVISION
       tags: main-performance
-      scan_tag: main-performance
   - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
     inputs:
       <<: *build-inputs
@@ -61,15 +56,13 @@ include:
       build_args: --build-arg RUNTIME=fedora --build-arg TAILSCALE_CHANNEL=main --build-arg TAILSCALE_REVISION=$DERP_MAIN_REVISION
       image: derper-fedora
       tags: main
-      scan_tag: main
   - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
     inputs:
       <<: *build-inputs
       name: fedora-tag-performance
       build_args: --build-arg RUNTIME=fedora --build-arg PATCH_VARIANT=performance
       image: derper-fedora
-      tags: $DERP_PERFORMANCE_TAGS
-      scan_tag: performance
+      tags: performance,latest-performance,$DERP_PERFORMANCE_TAGS
   - component: $CI_SERVER_FQDN/ci/docker/build-and-scan@4
     inputs:
       <<: *build-inputs
@@ -77,7 +70,6 @@ include:
       build_args: --build-arg RUNTIME=fedora --build-arg TAILSCALE_CHANNEL=main --build-arg PATCH_VARIANT=performance --build-arg TAILSCALE_REVISION=$DERP_MAIN_REVISION
       image: derper-fedora
       tags: main-performance
-      scan_tag: main-performance
 
 detect version:
   stage: test
@@ -88,10 +80,8 @@ detect version:
       VERSION="$(cat src/tailscale/VERSION.txt)"
       MAJOR="${VERSION%%.*}"
       MINOR="${VERSION%.*}"
-      DERP_TAGS="latest,$MAJOR,$MINOR,$VERSION"
-      DERP_PERFORMANCE_TAGS="performance,latest-performance,$MAJOR-performance,$MINOR-performance,$VERSION-performance"
-      printf 'DERP_TAGS=%s\nDERP_PERFORMANCE_TAGS=%s\n' "$DERP_TAGS" "$DERP_PERFORMANCE_TAGS" > derp.env
-    - printf 'DERP_MAIN_REVISION=%s\n' "$(git -C src/tailscale-main rev-parse --short=12 HEAD)" >> derp.env
+      REVISION="$(git -C src/tailscale-main rev-parse --short=12 HEAD)"
+      printf 'DERP_TAGS=%s\nDERP_PERFORMANCE_TAGS=%s\nDERP_MAIN_REVISION=%s\n' "$MAJOR,$MINOR,$VERSION" "$MAJOR-performance,$MINOR-performance,$VERSION-performance" "$REVISION" > derp.env
     - cat derp.env
   artifacts:
     reports:
